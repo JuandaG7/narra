@@ -64,7 +64,7 @@
   var lines = load(KEYS.lines, []);
   var settings = Object.assign({ lang: 'es-CO', local: false, division: 'mixto', mixedRule: 'abba' }, load(KEYS.settings, {}));
   function newGame() {
-    return { started: false, rival: '', startType: 'O', firstRatio: '4H', points: [], line: [], draft: null, typeOverride: null };
+    return { started: false, rival: '', startType: 'O', firstRatio: '4M', points: [], line: [], draft: null, typeOverride: null, halftime: null };
   }
   var game = Object.assign(newGame(), load(KEYS.game, {}) || {});
   if (game.points.length && !game.started) game.started = true; // datos de la versión anterior
@@ -86,13 +86,13 @@
     return c;
   }
   function ratioOk(c, ratio) { return ratio === '4H' ? (c.H === 4 && c.M === 3) : (c.H === 3 && c.M === 4); }
-  function ratioLabel(r) { return r === '4H' ? '4 H · 3 M' : '3 H · 4 M'; }
+  function ratioLabel(r) { return r === '4H' ? '4 chicos' : '4 chicas'; }
 
   function currentIndex() { var d = game.draft; return d && d.editIndex != null ? d.editIndex : game.points.length; }
   function pointType() {
     var d = game.draft;
     if (d && d.type) return d.type;
-    return game.typeOverride || Core.nextPointType(game.points, game.startType);
+    return game.typeOverride || Core.nextPointType(game.points, game.startType, game.halftime);
   }
   function pointRatio() {
     var d = game.draft;
@@ -465,13 +465,14 @@
     var rival = el('input', { type: 'text', placeholder: 'Rival (opcional)', value: game.rival || '', autocomplete: 'off' });
     rival.addEventListener('input', function () { game.rival = rival.value.trim(); saveGame(); });
     c.appendChild(rival);
-    c.appendChild(el('p', { class: 'field-label', text: '¿Quién hace el primer pull?' }));
-    c.appendChild(seg([['D', 'Nosotros'], ['O', 'Ellos']], game.startType, function (val) { game.startType = val; saveGame(); render(); }));
-    c.appendChild(el('p', { class: 'muted small', style: 'margin:6px 2px 0', text: game.startType === 'O' ? 'Empezamos en ataque.' : 'Empezamos en defensa.' }));
+    c.appendChild(el('p', { class: 'field-label', text: 'Según el sorteo, empezamos…' }));
+    c.appendChild(seg([['O', 'Atacando'], ['D', 'Defendiendo']], game.startType, function (val) { game.startType = val; saveGame(); render(); }));
+    c.appendChild(el('p', { class: 'muted small', style: 'margin:6px 2px 0', text: game.startType === 'O' ? 'Ellos hacen el primer pull.' : 'Nosotros hacemos el primer pull.' }));
     if (useAbba()) {
-      c.appendChild(el('p', { class: 'field-label', text: 'Proporción del primer punto' }));
-      c.appendChild(seg([['4H', '4 H · 3 M'], ['4M', '3 H · 4 M']], game.firstRatio, function (val) { game.firstRatio = val; saveGame(); render(); }));
-      c.appendChild(el('p', { class: 'muted small', style: 'margin:6px 2px 0', text: 'Después cambia sola cada dos puntos (ABBA).' }));
+      c.appendChild(el('p', { class: 'field-label', text: 'El primer punto es de…' }));
+      c.appendChild(seg([['4M', 'Chicas'], ['4H', 'Chicos']], game.firstRatio, function (val) { game.firstRatio = val; saveGame(); render(); }));
+      var a = ratioLabel(game.firstRatio), b = ratioLabel(game.firstRatio === '4H' ? '4M' : '4H');
+      c.appendChild(el('p', { class: 'muted small', style: 'margin:6px 2px 0', text: 'Orden: ' + a + ', luego 2 de ' + b.replace('4 ', '') + ', 2 de ' + a.replace('4 ', '') + '… El medio tiempo no lo cambia (WFDF).' }));
     }
     v.appendChild(c);
     v.appendChild(el('button', { class: 'btn accent big block', type: 'button', text: 'Empezar partido', onclick: function () {
@@ -571,8 +572,15 @@
     ]));
     var miss = 7 - ids.length;
     var hint = miss > 0 ? (miss === 1 ? 'Falta 1' : 'Faltan ' + miss) + ' en la línea (puedes empezar igual).'
-      : ratio && !ratioOk(gc, ratio) ? 'La línea no cumple ' + ratioLabel(ratio) + '.' : '';
+      : ratio && !ratioOk(gc, ratio) ? 'La línea no cumple: tocan ' + ratioLabel(ratio) + '.'
+      : type === 'D' && ratio ? 'Pull: lo hace ' + (ratio === '4M' ? 'una chica' : 'un chico') + ' (son mayoría).' : '';
     v.appendChild(el('div', { id: 'rec-status', class: 'rec-status', text: hint }));
+    if (game.halftime == null && game.points.length && currentIndex() === game.points.length) {
+      v.appendChild(el('div', { class: 'center' }, [el('button', { class: 'btn link', type: 'button', text: 'Marcar medio tiempo', onclick: function () {
+        game.halftime = game.points.length; game.typeOverride = null; saveGame(); render();
+        toast('Medio tiempo: el segundo tiempo arranca en ' + (pointType() === 'O' ? 'ataque' : 'defensa'), function () { game.halftime = null; saveGame(); render(); });
+      } })]));
+    }
   }
 
   // --- Grabando ---
@@ -1111,6 +1119,7 @@
     var pl = el('ul', { class: 'points' });
     var us = 0, them = 0;
     game.points.forEach(function (p, i) {
+      if (game.halftime === i && i) pl.appendChild(el('li', { class: 'g-head' }, [el('p', { class: 'g-label', style: 'margin:0', text: 'Medio tiempo · ' + us + '–' + them })]));
       var oc = Core.outcomeOf(p.events);
       if (oc === 'us') us++; if (oc === 'them') them++;
       var goal = p.events.filter(function (e) { return e.type === 'goal'; })[0];
@@ -1118,6 +1127,7 @@
       pl.appendChild(el('li', {}, [
         el('span', { class: 'res ' + (oc || ''), icon: oc === 'us' ? 'check' : oc === 'them' ? 'x' : 'help' }),
         p.type ? typeBadgeMini(p.type) : null,
+        p.ratio ? el('span', { class: 'g-tag ' + (p.ratio === '4M' ? 'M' : 'H'), title: ratioLabel(p.ratio), text: p.ratio === '4M' ? 'M' : 'H' }) : null,
         el('span', { class: 'txt', text: txt }),
         el('button', { class: 'icon-btn', type: 'button', icon: 'pencil', 'aria-label': 'Editar punto ' + (i + 1), onclick: function () {
           if (game.draft && game.draft.phase === 'recording') { toast('Termina el punto en curso primero'); return; }

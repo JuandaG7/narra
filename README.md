@@ -13,7 +13,11 @@ Todo funciona en el teléfono: plantilla, interpretación y estadísticas se gua
    - **Probar voz**: dices cada nombre una vez; lo que entienda el celular queda guardado como variante.
      Si dos apodos suenan igual, la app avisa.
    - **Líneas guardadas** (opcional): grupos de 7, marcados para ataque o defensa.
-2. **Nuevo partido**: rival, quién hace el primer pull y (en ABBA) la proporción del primer punto.
+2. **Nuevo partido**: rival, si según el sorteo empezamos **atacando o defendiendo** y (en mixto) si el
+   primer punto es **de chicas o de chicos**. Después la proporción sigue sola de dos en dos (regla A de WFDF);
+   el medio tiempo no la cambia. En los puntos de defensa la app recuerda quién hace el pull (la mayoría).
+   Al llegar al medio tiempo, toca **Marcar medio tiempo**: el segundo tiempo arranca al revés del primero
+   (si empezamos defendiendo, arrancamos atacando).
 3. **Durante el pull**: la app ya sabe si el punto es de **ataque** o **defensa** (quien anota hace el pull
    del siguiente; tocando la etiqueta se corrige). Pon una línea guardada con un toque o deja la del punto
    anterior; para un cambio, toca al que sale y luego al que entra en la banca. El contador muestra 7/7 y la

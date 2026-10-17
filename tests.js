@@ -106,6 +106,9 @@
     chk('primer punto recibiendo = ataque', core.nextPointType([], 'O'), 'O');
     chk('si anotamos, el siguiente es defensa', core.nextPointType([mk('Pipe a Mono, gol')], 'O'), 'D');
     chk('si anotan ellos, el siguiente es ataque', core.nextPointType([mk('nos anotan')], 'D'), 'O');
+    chk('medio tiempo: empezamos en defensa → segundo tiempo en ataque', core.nextPointType([mk('Pipe a Mono, gol')], 'D', 1), 'O');
+    chk('medio tiempo: empezamos en ataque → segundo tiempo en defensa', core.nextPointType([mk('nos anotan')], 'O', 1), 'D');
+    chk('después del primer punto del 2.º tiempo vuelve la regla normal', core.nextPointType([mk('nos anotan'), mk('nos anotan')], 'O', 1), 'O');
     chk('ABBA desde 4H', [0, 1, 2, 3, 4, 5, 6].map(function (i) { return core.ratioFor(i, '4H'); }),
       ['4H', '4M', '4M', '4H', '4H', '4M', '4M']);
     var odPts = [

@@ -408,3 +408,4 @@ body.focus .poss { margin-top: -4px; }
 .ae-ico svg { width: 22px; height: 22px; }
 .ae-progress { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: var(--accent); transform-origin: left; animation: ae-shrink linear forwards; }
 @keyframes ae-shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.points li.g-head { border-bottom: 0; padding: 12px 0 2px; }

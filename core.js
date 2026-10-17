@@ -357,13 +357,18 @@
 
   // Tipo del siguiente punto: quien anota hace el pull del siguiente.
   // startType: 'O' si en el primer punto recibimos el pull, 'D' si lo hacemos nosotros.
-  function nextPointType(points, startType) {
-    if (!points || !points.length) return startType || 'O';
+  // halftimeAt: cantidad de puntos jugados al llegar al medio tiempo; el primer punto del
+  // segundo tiempo es al revés del primero del partido.
+  function nextPointType(points, startType, halftimeAt) {
+    startType = startType || 'O';
+    points = points || [];
+    if (halftimeAt != null && points.length === halftimeAt) return startType === 'O' ? 'D' : 'O';
+    if (!points.length) return startType;
     var last = points[points.length - 1];
     var oc = outcomeOf(last.events || []);
     if (oc === 'us') return 'D';
     if (oc === 'them') return 'O';
-    return last.type || startType || 'O';
+    return last.type || startType;
   }
 
   // Regla ABBA (WFDF): la proporción cambia cada dos puntos. firstRatio: '4H' o '4M'.
