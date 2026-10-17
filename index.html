@@ -3,170 +3,34 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0b6e4f">
+  <meta name="theme-color" content="#F6F3EE" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121214" media="(prefers-color-scheme: dark)">
   <title>UltiVoz</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="top">
-    <div class="brand">UltiVoz</div>
-    <div class="score" id="score">0 – 0</div>
+  <header class="top" id="top">
+    <div class="brand"><span class="disc" aria-hidden="true"></span>UltiVoz</div>
+    <div class="score num-font" id="score" aria-live="polite"></div>
   </header>
 
   <main>
-    <!-- PARTIDO -->
-    <section id="view-game" class="view">
-      <div id="voice-warning" class="banner warn" hidden></div>
-
-      <!-- Inactivo / grabando -->
-      <div id="rec-panel">
-        <div class="point-title" id="point-title">Punto 1</div>
-
-        <details id="line-box" class="card">
-          <summary>Línea en cancha <span id="line-count" class="muted"></span></summary>
-          <div id="line-chips" class="chips"></div>
-          <div class="row-btns">
-            <button class="btn small ghost" id="line-all">Todos</button>
-            <button class="btn small ghost" id="line-none">Ninguno</button>
-          </div>
-        </details>
-
-        <button id="rec-btn" class="rec-btn">Empezar punto</button>
-        <div id="rec-status" class="muted center"></div>
-
-        <div id="live" class="card live" hidden>
-          <div class="label">Lo que escuché</div>
-          <div id="live-text" class="live-text"></div>
-          <div class="label">Eventos</div>
-          <ol id="live-events" class="live-events"></ol>
-        </div>
-
-        <div id="pad" class="card" hidden>
-          <div class="label">Botones (si la voz falla)</div>
-          <div id="pad-players" class="pad-players"></div>
-          <div class="pad-actions">
-            <button class="btn act" data-say="drop">Drop</button>
-            <button class="btn act" data-say="throwaway">Throwaway</button>
-            <button class="btn act" data-say="D de">D de…</button>
-            <button class="btn act good" data-say="gol">Gol</button>
-            <button class="btn act bad" data-say="nos anotan">Nos anotan</button>
-            <button class="btn act" data-say="la pierden ellos">Pierden ellos</button>
-            <button class="btn act ghost" data-say="borra">Deshacer</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Revisión -->
-      <div id="review-panel" hidden>
-        <div class="point-title" id="review-title">Revisar punto</div>
-        <div id="outcome" class="banner"></div>
-
-        <div id="unknown-box" class="card" hidden>
-          <div class="label">Palabras que no reconocí — ¿quién es?</div>
-          <div id="unknown-list"></div>
-        </div>
-
-        <ol id="events" class="events"></ol>
-
-        <div class="add-row">
-          <span class="muted">Agregar:</span>
-          <button class="btn small" data-add="pass">Pase</button>
-          <button class="btn small" data-add="goal">Gol</button>
-          <button class="btn small" data-add="drop">Drop</button>
-          <button class="btn small" data-add="throwaway">TA</button>
-          <button class="btn small" data-add="d">D</button>
-          <button class="btn small" data-add="them">Nos anotan</button>
-        </div>
-
-        <details class="card">
-          <summary>Narración (editable)</summary>
-          <textarea id="transcript" rows="4"></textarea>
-          <button class="btn small" id="reparse">Reinterpretar texto</button>
-        </details>
-
-        <div class="review-actions">
-          <button class="btn big good" id="confirm">Confirmar punto</button>
-          <div class="row-btns">
-            <button class="btn ghost" id="continue">Seguir narrando</button>
-            <button class="btn ghost bad-text" id="discard">Descartar</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- PLANTILLA -->
-    <section id="view-roster" class="view" hidden>
-      <form id="player-form" class="card">
-        <div class="label" id="form-title">Agregar jugador</div>
-        <div class="form-row">
-          <input id="f-name" placeholder="Apodo corto (ej. Pipe)" autocomplete="off" required>
-          <input id="f-number" placeholder="#" inputmode="numeric" class="num">
-        </div>
-        <input id="f-aliases" placeholder="Cómo lo escribe el celular (opcional, separado por comas)" autocomplete="off">
-        <div class="row-btns">
-          <button class="btn good" type="submit" id="f-submit">Agregar</button>
-          <button class="btn ghost" type="button" id="f-cancel" hidden>Cancelar</button>
-        </div>
-      </form>
-      <ul id="roster-list" class="roster-list"></ul>
-      <div class="row-btns">
-        <button class="btn small ghost" id="sample-roster">Cargar plantilla de ejemplo</button>
-      </div>
-      <p class="muted small">Consejo: apodos de 1 palabra que suenen distinto entre sí. Si el celular entiende mal un nombre, agrégalo como "cómo lo escribe".</p>
-
-      <div class="card">
-        <div class="label">Voz</div>
-        <label class="field">Idioma
-          <select id="s-lang">
-            <option value="es-CO">Español (Colombia)</option>
-            <option value="es-MX">Español (México)</option>
-            <option value="es-ES">Español (España)</option>
-            <option value="es-AR">Español (Argentina)</option>
-            <option value="es-US">Español (EE. UU.)</option>
-          </select>
-        </label>
-        <label class="check"><input type="checkbox" id="s-local"> Reconocer en el dispositivo (experimental, Chrome reciente)</label>
-      </div>
-    </section>
-
-    <!-- ESTADÍSTICAS -->
-    <section id="view-stats" class="view" hidden>
-      <div class="big-score card">
-        <div><div class="label">Nosotros</div><div id="s-us" class="n">0</div></div>
-        <div class="dash">–</div>
-        <div><div class="label">Ellos</div><div id="s-them" class="n">0</div></div>
-      </div>
-
-      <div class="card">
-        <div class="label">Por jugador</div>
-        <div class="table-wrap"><table id="stats-table"></table></div>
-        <p class="muted small">Pas = pases completos lanzados · Rec = recepciones · TA = throwaways · +/- = Gol + Ast + D − Drop − TA</p>
-      </div>
-
-      <div class="card">
-        <div class="label">Top conexiones</div>
-        <ol id="connections" class="connections"></ol>
-      </div>
-
-      <div class="card">
-        <div class="label">Puntos</div>
-        <ol id="points-list" class="points-list"></ol>
-      </div>
-
-      <div class="row-btns">
-        <button class="btn ghost" id="export">Exportar CSV</button>
-        <button class="btn ghost bad-text" id="new-game">Nuevo partido</button>
-      </div>
-    </section>
+    <section id="view-game" class="view"></section>
+    <section id="view-roster" class="view" hidden></section>
+    <section id="view-stats" class="view" hidden></section>
   </main>
 
-  <nav class="tabs">
-    <button data-view="game" class="active">Partido</button>
-    <button data-view="roster">Plantilla</button>
-    <button data-view="stats">Stats</button>
+  <nav class="tabs" id="tabs">
+    <button data-view="game" class="active"><span data-icon="disc"></span>Partido</button>
+    <button data-view="roster"><span data-icon="users"></span>Plantilla</button>
+    <button data-view="stats"><span data-icon="chart"></span>Stats</button>
   </nav>
+
+  <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true" hidden></div>
+  <div class="toast" id="toast" role="status" hidden></div>
 
   <script src="core.js"></script>
   <script src="app.js"></script>

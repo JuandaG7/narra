@@ -6,9 +6,19 @@ Todo funciona en el teléfono: plantilla, interpretación y estadísticas se gua
 
 ## Cómo se usa
 
-1. **Plantilla**: carga a los jugadores con un apodo corto (una palabra, que suenen distinto) y su número.
-   Si el celular entiende mal un nombre, escribe en "cómo lo escribe el celular" la palabra que sale (p. ej. Pipe → `pipa`).
-2. **Partido → Empezar punto** y narra desde la banca:
+1. **Plantilla** (una sola vez)
+   - Categoría del equipo: **Mixto**, Open o Femenino. En mixto, cada jugador lleva H o M y eliges la regla
+     de proporción: **ABBA** (la app dice si toca 4 H · 3 M o 3 H · 4 M) o "la ofensa decide".
+   - Carga a todos con apodo corto (una palabra, que suenen distinto) y número.
+   - **Probar voz**: dices cada nombre una vez; lo que entienda el celular queda guardado como variante.
+     Si dos apodos suenan igual, la app avisa.
+   - **Líneas guardadas** (opcional): grupos de 7, marcados para ataque o defensa.
+2. **Nuevo partido**: rival, quién hace el primer pull y (en ABBA) la proporción del primer punto.
+3. **Durante el pull**: la app ya sabe si el punto es de **ataque** o **defensa** (quien anota hace el pull
+   del siguiente; tocando la etiqueta se corrige). Pon una línea guardada con un toque o deja la del punto
+   anterior; para un cambio, toca al que sale y luego al que entra en la banca. El contador muestra 7/7 y la
+   proporción H/M.
+4. **Empezar punto** y narra desde la banca:
    - `Pipe a Mono, Mono a Juancho, gol` → 2 pases, gol de Juancho, asistencia de Mono
    - `drop` / `se le cae` → drop del último receptor
    - `throwaway` / `la pierde` / `turn` → throwaway del que tiene el disco (`throwaway de Pipe` para decir quién)
@@ -18,12 +28,15 @@ Todo funciona en el teléfono: plantilla, interpretación y estadísticas se gua
    - `la pierden ellos` → recuperamos sin D
    - `borra` / `me equivoqué` → deshace el último evento
    - Números también sirven: `el 7 a el 12`
-3. **Terminar punto** → pantalla de revisión (para el pull): cambia jugadores, borra o agrega eventos.
-   Las filas amarillas son nombres que se reconocieron "por parecido": revísalas. Las palabras que no
-   se reconocieron aparecen arriba; asígnalas a un jugador y quedan guardadas como alias.
-4. Si la voz falla, durante el punto hay **botones** con los jugadores y las acciones (escriben las mismas palabras).
-5. **Stats**: marcador, tabla por jugador (pases, recepciones, goles, asistencias, D, drops, throwaways, +/-),
-   top de conexiones y lista de puntos (se pueden editar). Exportable a CSV.
+   Los nombres se buscan primero entre los 7 en cancha, así que hay muchas menos confusiones. Si se escucha
+   a alguien de la banca, queda marcado para revisar.
+5. **Revisión** (en el mismo pull): cada evento es una frase; toca un nombre para cambiarlo, toca el tipo
+   para cambiarlo, desliza a la izquierda o toca × para borrar (con "Deshacer"). Lo amarillo es dudoso.
+   Las palabras no reconocidas se asignan a un jugador y quedan aprendidas. **Confirmar** y a la siguiente línea.
+6. Si la voz falla, durante el punto hay **botones** con los 7 de la línea y las acciones.
+7. **Stats**: marcador, **holds** (puntos de ataque ganados) y **breaks** (de defensa), tabla por jugador
+   filtrable por ataque/defensa (+/-, goles, asistencias, D, drops, throwaways, pases, recepciones, puntos
+   jugados), conexiones y lista de puntos editables. Exportable a CSV.
 
 ## Correr en el computador
 
@@ -72,7 +85,7 @@ Para el primer entreno: lleva datos móviles y prueba ambos modos.
 
 ## Archivos
 
-- `core.js` — intérprete de la narración (normalización, coincidencia difusa de nombres, máquina de estados) y cálculo de estadísticas.
+- `core.js` — intérprete de la narración (normalización, coincidencia difusa de nombres con prioridad a la línea, máquina de estados), ataque/defensa, ABBA y estadísticas.
 - `app.js`, `index.html`, `styles.css` — interfaz.
 - `tests.js`, `tests.html`, `run_tests.sh` — pruebas del intérprete.
 - `sw.js`, `manifest.webmanifest` — funcionamiento sin conexión e instalación en pantalla de inicio.

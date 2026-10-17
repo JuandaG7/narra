@@ -1,5 +1,5 @@
 // Service worker: guarda la app para que abra sin internet (red primero, caché si no hay señal).
-var CACHE = 'ultivoz-v1';
+var CACHE = 'ultivoz-v2';
 var FILES = ['./', 'index.html', 'styles.css', 'core.js', 'app.js', 'manifest.webmanifest', 'icon.svg'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }));

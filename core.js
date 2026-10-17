@@ -143,13 +143,30 @@
 
   // ---------- Tokenización a elementos ----------
 
-  function tokenize(text, roster) {
-    var matcher = buildMatcher(roster);
+  // Busca primero entre los de la línea (aunque sea por parecido: lo normal es que el celular
+  // escuche mal a alguien que está jugando). Si no aparece, en toda la plantilla, marcado "fuera de línea".
+  function lookupName(compact, mLine, mAll, line, allowStop) {
+    var a = mLine ? matchName(compact, mLine, allowStop) : null;
+    if (a) return a;
+    var b = matchName(compact, mAll, allowStop);
+    if (b && mLine && line.indexOf(b.id) < 0) b.offLine = true;
+    return b;
+  }
+
+  function tokenize(text, roster, line) {
+    line = (line || []).filter(function (id) { return (roster || []).some(function (p) { return p.id === id; }); });
+    var mAll = buildMatcher(roster);
+    var mLine = line.length ? buildMatcher(roster.filter(function (p) { return line.indexOf(p.id) >= 0; })) : null;
     var norm = normalize(text);
     var tokens = applyMarkers(norm).split(' ').filter(Boolean);
     var items = [];
     var unknown = [];
     var i = 0;
+    function player(m, heard, afterDe) {
+      var it = { kind: 'player', id: m.id, dist: m.dist, heard: heard, afterDe: afterDe };
+      if (m.offLine) it.offLine = true;
+      items.push(it);
+    }
     while (i < tokens.length) {
       var t = tokens[i];
       var prev = tokens[i - 1];
@@ -163,22 +180,23 @@
       if (/^\d{1,3}$/.test(t)) num = String(parseInt(t, 10));
       else if (NUMBER_WORDS.hasOwnProperty(t)) num = String(NUMBER_WORDS[t]);
       else if ((t === 'uno' || t === 'una') && (prev === 'el' || prev === 'numero')) num = '1';
-      if (num !== null && matcher.byNumber[num]) {
-        items.push({ kind: 'player', id: matcher.byNumber[num], dist: 0, heard: t, afterDe: afterDe });
+      if (num !== null && (mLine && mLine.byNumber[num] || mAll.byNumber[num])) {
+        var byLine = mLine && mLine.byNumber[num];
+        player({ id: byLine || mAll.byNumber[num], dist: 0, offLine: !!mLine && !byLine }, t, afterDe);
         i++; continue;
       }
       // Bigrama (p. ej. "juan cho" → Juancho) si mejora la coincidencia de una sola palabra.
       var next = tokens[i + 1];
-      var uni = matchName(t, matcher, false);
+      var uni = lookupName(t, mLine, mAll, line, false);
       if (next && !STOPWORDS[t] && !MARKER_TYPE[next] && !STOPWORDS[next]) {
-        var bi = matchName(t + next, matcher, true);
+        var bi = lookupName(t + next, mLine, mAll, line, true);
         if (bi && (!uni || bi.dist < uni.dist)) {
-          items.push({ kind: 'player', id: bi.id, dist: bi.dist, heard: t + ' ' + next, afterDe: afterDe });
+          player(bi, t + ' ' + next, afterDe);
           i += 2; continue;
         }
       }
       if (uni) {
-        items.push({ kind: 'player', id: uni.id, dist: uni.dist, heard: t, afterDe: afterDe });
+        player(uni, t, afterDe);
       } else if (!STOPWORDS[t] && t.length >= 3 && !/^\d+$/.test(t) && unknown.indexOf(t) < 0) {
         unknown.push(t);
       }
@@ -189,8 +207,8 @@
 
   // ---------- Interpretación (máquina de estados) ----------
 
-  function interpret(text, roster) {
-    var tk = tokenize(text, roster);
+  function interpret(text, roster, line) {
+    var tk = tokenize(text, roster, line);
     var items = tk.items;
     var state = { events: [], holder: null, holderUnc: null, outcome: null };
     var history = [];
@@ -198,7 +216,11 @@
     function snapshot() {
       history.push({ events: state.events.slice(), holder: state.holder, holderUnc: state.holderUnc, outcome: state.outcome });
     }
-    function unc(it) { return it && it.dist > 0 ? it.heard : null; }
+    function unc(it) {
+      if (!it) return null;
+      if (it.offLine) return it.heard + ' (no está en la línea)';
+      return it.dist > 0 ? it.heard : null;
+    }
     function push(ev) {
       var heard = [].slice.call(arguments, 1).filter(Boolean);
       if (heard.length) ev.uncertain = heard.join(', ');
@@ -323,17 +345,37 @@
     return { points: 0, completions: 0, catches: 0, goals: 0, assists: 0, drops: 0, throwaways: 0, ds: 0, plusMinus: 0 };
   }
 
-  function computeStats(points, roster) {
+  // Tipo del siguiente punto: quien anota hace el pull del siguiente.
+  // startType: 'O' si en el primer punto recibimos el pull, 'D' si lo hacemos nosotros.
+  function nextPointType(points, startType) {
+    if (!points || !points.length) return startType || 'O';
+    var last = points[points.length - 1];
+    var oc = outcomeOf(last.events || []);
+    if (oc === 'us') return 'D';
+    if (oc === 'them') return 'O';
+    return last.type || startType || 'O';
+  }
+
+  // Regla ABBA (WFDF): la proporción cambia cada dos puntos. firstRatio: '4H' o '4M'.
+  function ratioFor(index, firstRatio) {
+    var other = firstRatio === '4H' ? '4M' : '4H';
+    return ((index + 1) >> 1) % 2 === 0 ? firstRatio : other;
+  }
+
+  function computeStats(points, roster, typeFilter) {
     var players = {};
     (roster || []).forEach(function (p) { players[p.id] = emptyLine(); });
     function P(id) { if (!id) return null; if (!players[id]) players[id] = emptyLine(); return players[id]; }
     var score = { us: 0, them: 0 };
+    var od = { O: { played: 0, won: 0 }, D: { played: 0, won: 0 } };
     var conn = {};
 
     (points || []).forEach(function (pt) {
       var oc = outcomeOf(pt.events || []);
       if (oc === 'us') score.us++;
       if (oc === 'them') score.them++;
+      if (od[pt.type] && oc) { od[pt.type].played++; if (oc === 'us') od[pt.type].won++; }
+      if (typeFilter && pt.type !== typeFilter) return;
       (pt.line || []).forEach(function (id) { var s = P(id); if (s) s.points++; });
       (pt.events || []).forEach(function (ev) {
         var a, b;
@@ -375,7 +417,8 @@
       return { from: parts[0], to: parts[1], count: conn[k] };
     }).sort(function (x, y) { return y.count - x.count; });
 
-    return { players: players, score: score, connections: connections };
+    // holds = puntos de ataque ganados; breaks = puntos de defensa ganados
+    return { players: players, score: score, connections: connections, holds: od.O, breaks: od.D };
   }
 
   var api = {
@@ -385,6 +428,8 @@
     tokenize: tokenize,
     interpret: interpret,
     outcomeOf: outcomeOf,
+    nextPointType: nextPointType,
+    ratioFor: ratioFor,
     computeStats: computeStats
   };
   root.UltiCore = api;
