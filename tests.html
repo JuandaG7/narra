@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UltiVoz pruebas</title>
+  <style>
+    body { font: 15px/1.4 system-ui, sans-serif; margin: 0; padding: 16px; background: #f4f6f5; color: #14201b; }
+    li { margin-bottom: 6px; } .ok { color: #0b8a55; } .fail { color: #c0392b; } code { font-size: 13px; }
+    #try { width: 100%; padding: 10px; font: inherit; box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <h1>Pruebas del intérprete</h1>
+  <p id="summary"></p>
+  <ol id="list"></ol>
+  <h2>Probar una frase</h2>
+  <p>Plantilla de prueba: Pipe 7, Mono 12, Juancho 3, Sara 9, Leo 5, Caro 21.</p>
+  <input id="try" value="Pipe a Mono, Mono a Juancho, gol">
+  <pre id="out"></pre>
+  <script src="core.js"></script>
+  <script src="tests.js"></script>
+  <script>
+    var r = runParserTests(UltiCore), fails = r.filter(function (t) { return !t.ok; }).length;
+    document.getElementById('summary').innerHTML = '<b class="' + (fails ? 'fail' : 'ok') + '">' + (r.length - fails) + '/' + r.length + ' pruebas OK</b>';
+    r.forEach(function (t) {
+      var li = document.createElement('li');
+      li.className = t.ok ? 'ok' : 'fail';
+      li.textContent = (t.ok ? '✔ ' : '✖ ') + t.name + ' → ' + t.got + (t.ok ? '' : '  (esperado: ' + t.expected + ')');
+      document.getElementById('list').appendChild(li);
+    });
+    var R = [{id:'p1',name:'Pipe',number:7},{id:'p2',name:'Mono',number:12},{id:'p3',name:'Juancho',number:3},{id:'p4',name:'Sara',number:9},{id:'p5',name:'Leo',number:5},{id:'p6',name:'Caro',number:21}];
+    function go() { document.getElementById('out').textContent = JSON.stringify(UltiCore.interpret(document.getElementById('try').value, R), null, 1); }
+    document.getElementById('try').addEventListener('input', go); go();
+  </script>
+</body>
+</html>
