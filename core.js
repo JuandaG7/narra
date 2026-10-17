@@ -74,7 +74,7 @@
   // ---------- Palabras clave (frases → marcadores) ----------
   // El orden importa: las frases más específicas van primero.
   var MARKERS = [
-    ['xundox', /\b(borra|borrar|borralo|borrala|cancela|cancelar|corrijo|corrige|me equivoque|error mio|deshacer|deshaz)\b/g],
+    ['xundox', /\b(borra|borrar|borralo|borrala|cancela|cancelar|corrijo|corrige|me equivoque|error mio|deshacer|deshaz|no fue (gol|punto)|anulado|anulalo|no vale)\b/g],
     ['xthemx', /\b(nos (anotan|anotaron|anota|anoto|meten|metieron|hacen|hicieron|marcan|marcaron)( el)?( punto| gol)?|(punto|gol|anotan|anotaron|marcan) (de|para) (ellos|el rival|los otros)|(anotan|anotaron) ellos|ellos (anotan|anotaron|marcan)|punto rival|gol rival)\b/g],
     ['xoppx', /\b(la pierden|pierden ellos|ellos (la )?pierden|error de ellos|(turn|turnover|drop|throwaway) de ellos|se les cae|la dejan caer|la botan|la tiran afuera|recuperamos)\b/g],
     ['xdropx', /\b(se le (cae|cayo)|la (deja|dejo) caer|se la come|dropea|dropeo|dropear|dropeada|drop|drope|drops|trop|drob)\b/g],
@@ -207,7 +207,8 @@
 
   // ---------- Interpretación (máquina de estados) ----------
 
-  function interpret(text, roster, line) {
+  // opts.start: quién tiene el disco al empezar ('us' en ataque, 'them' en defensa).
+  function interpret(text, roster, line, opts) {
     var tk = tokenize(text, roster, line);
     var items = tk.items;
     var state = { events: [], holder: null, holderUnc: null, outcome: null };
@@ -328,7 +329,16 @@
       }
     }
 
-    return { events: state.events, outcome: state.outcome, unknown: tk.unknown };
+    // Posesión actual: en un punto de defensa, si recuperamos el disco, atacamos (el punto sigue siendo de defensa).
+    var poss = (opts && opts.start) || null;
+    state.events.forEach(function (ev) {
+      if (ev.type === 'pass' || ev.type === 'd' || ev.type === 'opp') poss = 'us';
+      if (ev.type === 'drop' || ev.type === 'throwaway') poss = 'them';
+    });
+    if (state.holder) poss = 'us';
+    if (state.outcome) poss = null;
+
+    return { events: state.events, outcome: state.outcome, unknown: tk.unknown, possession: poss };
   }
 
   function outcomeOf(events) {

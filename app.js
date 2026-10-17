@@ -158,6 +158,24 @@
     return close;
   }
 
+  // En mixto, separa chicos y chicas (más fácil de encontrar cuando toca usar botones).
+  function genderGroups(list) {
+    if (!isMixed()) return [{ label: null, key: '', players: list }];
+    var g = [{ label: 'Chicos', key: 'H', players: [] }, { label: 'Chicas', key: 'M', players: [] }, { label: 'Sin asignar', key: 'X', players: [] }];
+    list.forEach(function (p) { g[p.gender === 'H' ? 0 : p.gender === 'M' ? 1 : 2].players.push(p); });
+    return g.filter(function (x) { return x.players.length; });
+  }
+  function grouped(list, make, cls, layout) {
+    var groups = genderGroups(list);
+    if (!groups.length || !groups[0].label) return el('div', { class: cls }, list.map(make));
+    return el('div', { class: layout === 'cols' ? 'pad-groups' : 'g-stack' }, groups.map(function (g) {
+      return el('div', { class: 'g-group ' + g.key }, [
+        el('p', { class: 'g-label', text: g.label + ' · ' + g.players.length }),
+        el('div', { class: cls }, g.players.map(make))
+      ]);
+    }));
+  }
+
   function playerButton(p, current, onPick) {
     return el('button', { class: 'btn' + (p.id === current ? ' current' : ''), type: 'button', onclick: function () { onPick(p.id); } }, [
       isMixed() ? el('span', { class: 'g-tag ' + (p.gender || ''), text: p.gender || '·' }) : null, p.name
@@ -170,12 +188,11 @@
       var inLine = lineIds();
       var on = sorted(roster.filter(function (p) { return inLine.indexOf(p.id) >= 0; }));
       var off = sorted(roster.filter(function (p) { return inLine.indexOf(p.id) < 0; }));
-      if (on.length) {
-        sh.appendChild(el('div', { class: 'sheet-grid' }, on.map(function (p) { return playerButton(p, current, pick); })));
-      }
+      var mk = function (p) { return playerButton(p, current, pick); };
+      if (on.length) sh.appendChild(grouped(on, mk, 'sheet-grid'));
       if (off.length) {
         sh.appendChild(el('p', { class: 'label sheet-sub', text: on.length ? 'Resto de la plantilla' : 'Plantilla' }));
-        sh.appendChild(el('div', { class: 'sheet-grid' }, off.map(function (p) { return playerButton(p, current, pick); })));
+        sh.appendChild(grouped(off, mk, 'sheet-grid'));
       }
       if (allowNone) {
         sh.appendChild(el('button', { class: 'btn block ghost', style: 'margin-top:12px', type: 'button', text: 'Nadie / no sé', onclick: function () { pick(null); } }));
@@ -303,6 +320,39 @@
 
   // ---------- Flujo del punto ----------
   var lastGameState = null, reviewAnimate = false, lastLiveCount = 0, timerId = null, lastAdded = null;
+  var autoEnd = null, autoEndBlocked = false;
+  var AUTO_END_MS = 4000;
+
+  function startAutoEnd(r) {
+    var last = r.events[r.events.length - 1];
+    var bar = el('div', { class: 'autoend', role: 'alertdialog', 'aria-label': 'Cerrando el punto' }, [
+      el('div', { class: 'row' }, [
+        el('span', { class: 'ae-ico ' + r.outcome, icon: r.outcome === 'us' ? 'check' : 'x' }),
+        el('div', { style: 'flex:1;min-width:0' }, [
+          el('b', { text: last ? describe(last) : (r.outcome === 'us' ? 'Punto nuestro' : 'Punto de ellos') }),
+          el('div', { class: 'small', style: 'opacity:.75', text: 'Cerrando el punto…' })
+        ])
+      ]),
+      el('div', { class: 'row', style: 'margin-top:10px' }, [
+        el('button', { class: 'btn', style: 'flex:1', type: 'button', text: 'No fue punto', onclick: function () {
+          clearAutoEnd(); appendText('no fue punto'); buzz(20); renderLive();
+        } }),
+        el('button', { class: 'btn accent', style: 'flex:1', type: 'button', text: 'Cerrar ya', onclick: function () { clearAutoEnd(); endPoint(); } })
+      ]),
+      el('i', { class: 'ae-progress', style: 'animation-duration:' + AUTO_END_MS + 'ms' })
+    ]);
+    document.body.appendChild(bar);
+    raf2(function () { bar.classList.add('show'); });
+    buzz([60, 60, 60]);
+    autoEnd = { el: bar, timer: setTimeout(function () { clearAutoEnd(); endPoint(); }, AUTO_END_MS) };
+  }
+  function clearAutoEnd() {
+    if (!autoEnd) return;
+    clearTimeout(autoEnd.timer);
+    var b = autoEnd.el; autoEnd = null;
+    b.classList.remove('show');
+    setTimeout(function () { b.remove(); }, 260);
+  }
 
   function startPoint() {
     game.draft = { phase: 'recording', transcript: '', events: [], unknown: [], editIndex: null, type: pointType(), startedAt: Date.now() };
@@ -310,10 +360,13 @@
     saveGame();
     buzz(50);
     lastLiveCount = 0;
+    autoEndBlocked = false;
     startListening();
     render();
   }
   function endPoint() {
+    clearAutoEnd();
+    if (!game.draft || game.draft.phase !== 'recording') return;
     buzz([30, 40, 30]);
     var b = $('rec-btn'); if (b) b.disabled = true;
     setStatus('Procesando…');
@@ -505,11 +558,11 @@
     var bench = sorted(roster.filter(function (p) { return ids.indexOf(p.id) < 0; }));
     if (bench.length) {
       c.appendChild(el('p', { class: 'label', style: 'margin:14px 0 8px', text: 'Banca · toca para entrar' }));
-      c.appendChild(el('div', { class: 'bench' }, bench.map(function (p) {
+      c.appendChild(grouped(bench, function (p) {
         return el('button', { class: 'chip', type: 'button', onclick: function () { addToLine(p.id); } }, [
           isMixed() ? el('span', { class: 'g-tag ' + (p.gender || ''), text: p.gender || '·' }) : null, p.name
         ]);
-      })));
+      }, 'bench'));
     }
     v.appendChild(c);
 
@@ -531,6 +584,7 @@
       el('h2', { class: 'title', style: 'margin:0', text: 'Punto ' + (currentIndex() + 1) }),
       el('span', { class: 'spacer' }), timer, typeBadge(pointType())
     ]));
+    v.appendChild(el('div', { class: 'row', style: 'justify-content:center' }, [el('span', { id: 'poss', class: 'poss' })]));
     function tick() {
       var s = Math.floor((Date.now() - (d.startedAt || Date.now())) / 1000);
       var t = $('timer'); if (t) t.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
@@ -553,9 +607,9 @@
     var players = sorted(roster.filter(function (p) { return !ids.length || ids.indexOf(p.id) >= 0; }));
     var pad = el('div', { class: 'card' }, [
       el('p', { class: 'label', text: 'Botones' }),
-      el('div', { class: 'pad-players' }, players.map(function (p) {
+      grouped(players, function (p) {
         return el('button', { class: 'btn', type: 'button', text: p.name, onclick: function (e) { tapAnim(e.currentTarget); appendText(p.name); renderLive(); } });
-      })),
+      }, isMixed() ? 'pad-players two' : 'pad-players', 'cols'),
       el('div', { class: 'pad-actions' }, [
         ['drop', 'Drop'], ['throwaway', 'Throwaway'], ['D de', 'D de…'], ['gol', 'Gol', 'accent'], ['nos anotan', 'Nos anotan', 'solid'], ['borra', 'Deshacer', 'ghost']
       ].map(function (a) {
@@ -576,7 +630,22 @@
     t.innerHTML = '';
     t.appendChild(document.createTextNode(d.transcript || (interim ? '' : '…')));
     if (interim) t.appendChild(el('span', { class: 'interim', text: ' ' + interim }));
-    var r = Core.interpret(d.transcript + ' ' + interim, roster, lineIds());
+    var r = Core.interpret(d.transcript + ' ' + interim, roster, lineIds(), { start: pointType() === 'O' ? 'us' : 'them' });
+    var pe = $('poss');
+    if (pe) {
+      var pk = r.possession || '';
+      if (pe.dataset.k !== pk) {
+        pe.dataset.k = pk;
+        pe.className = 'poss ' + pk;
+        pe.innerHTML = '';
+        if (pk) { pe.insertAdjacentHTML('afterbegin', svg(pk === 'us' ? 'disc' : 'shield')); pe.appendChild(document.createTextNode(pk === 'us' ? 'Atacando' : 'Defendiendo')); }
+      }
+    }
+    // Cierre automático: al detectar gol o punto de ellos (solo con texto ya confirmado).
+    var settled = interim ? Core.interpret(d.transcript, roster, lineIds()) : r;
+    if (!settled.outcome) autoEndBlocked = false;
+    if (settled.outcome && !autoEndBlocked && !autoEnd) startAutoEnd(settled);
+    else if (!settled.outcome && autoEnd) clearAutoEnd();
     ol.innerHTML = '';
     var shown = r.events.slice(-2); // altura fija: los botones de abajo no se mueven
     var isNew = !initial && r.events.length > lastLiveCount;
@@ -670,7 +739,9 @@
 
     v.appendChild(el('div', { class: 'bottom-bar' }, [
       isEdit ? el('span') : el('button', { class: 'btn big', type: 'button', icon: 'mic', 'aria-label': 'Seguir narrando', onclick: function () {
-        d.phase = 'recording'; saveGame(); lastLiveCount = d.events.length; startListening(); render();
+        d.phase = 'recording'; saveGame(); lastLiveCount = d.events.length;
+        autoEndBlocked = !!Core.outcomeOf(d.events); // si ya había resultado, no cerrar de inmediato
+        startListening(); render();
       } }),
       el('button', { class: 'btn solid big', type: 'button', icon: 'check', onclick: confirmPoint }, [' Confirmar'])
     ]));
@@ -801,7 +872,7 @@
     // Lista
     var list = el('div', { class: 'card' });
     list.appendChild(el('div', { class: 'row', style: 'margin-bottom:4px' }, [
-      el('p', { class: 'label', style: 'margin:0', text: 'Jugadores · ' + roster.length + (isMixed() ? ' (' + genderCount(roster.map(function (p) { return p.id; })).H + ' H · ' + genderCount(roster.map(function (p) { return p.id; })).M + ' M)' : '') }),
+      el('p', { class: 'label', style: 'margin:0', text: 'Jugadores · ' + roster.length }),
       el('span', { class: 'spacer' }),
       roster.length && SR ? el('button', { class: 'btn small accent', type: 'button', icon: 'mic', onclick: function () { openVoiceTest(sorted(roster).map(function (p) { return p.id; })); } }, [' Probar voz']) : null
     ]));
@@ -810,7 +881,12 @@
         el('div', {}, [el('button', { class: 'btn small', style: 'margin-top:12px', type: 'button', text: 'Usar plantilla de ejemplo', onclick: loadSample })])]));
     } else {
       var ul = el('ul', { class: 'list' });
-      roster.slice().sort(function (a, b) { return (+a.number || 999) - (+b.number || 999) || a.name.localeCompare(b.name); }).forEach(function (p) {
+      var byNum = roster.slice().sort(function (a, b) { return (+a.number || 999) - (+b.number || 999) || a.name.localeCompare(b.name); });
+      genderGroups(byNum).forEach(function (g) {
+        if (g.label) ul.appendChild(el('li', { class: 'g-head g-group ' + g.key }, [el('p', { class: 'g-label', style: 'margin:0', text: g.label + ' · ' + g.players.length })]));
+        g.players.forEach(rosterRow);
+      });
+      function rosterRow(p) {
         var li = el('li', {}, [
           el('span', { class: 'jersey', text: p.number ? p.number : '·' }),
           isMixed() ? el('span', { class: 'g-tag ' + (p.gender || ''), text: p.gender || '?' }) : null,
@@ -827,7 +903,7 @@
           } })
         ]);
         ul.appendChild(li);
-      });
+      }
       list.appendChild(ul);
     }
     v.appendChild(list);
@@ -894,7 +970,7 @@
         sh.appendChild(seg([['', 'Cualquiera'], ['O', 'Ataque'], ['D', 'Defensa']], draft.type, function (val) { draft.type = val; draft.name = nm.value; build(); }));
         var gc = genderCount(draft.players);
         sh.appendChild(el('p', { class: 'field-label', text: 'Jugadores · ' + draft.players.length + '/7' + (isMixed() ? ' · ' + gc.H + ' H · ' + gc.M + ' M' : '') }));
-        sh.appendChild(el('div', { class: 'bench' }, sorted(roster).map(function (p) {
+        sh.appendChild(grouped(sorted(roster), function (p) {
           var on = draft.players.indexOf(p.id) >= 0;
           return el('button', { class: 'chip' + (on ? ' on' : ''), type: 'button', onclick: function () {
             draft.name = nm.value;
@@ -903,7 +979,7 @@
             else { toast('Máximo 7 por línea'); return; }
             build();
           } }, [isMixed() ? el('span', { class: 'g-tag ' + (p.gender || ''), text: p.gender || '·' }) : null, p.name]);
-        })));
+        }, 'bench'));
         sh.appendChild(el('button', { class: 'btn accent big block', style: 'margin-top:16px', type: 'button', text: 'Guardar línea', onclick: function () {
           if (saved) return;
           draft.name = nm.value.trim() || (draft.type === 'O' ? 'Ataque' : draft.type === 'D' ? 'Defensa' : 'Línea ' + (lines.length + 1));

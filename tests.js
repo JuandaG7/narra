@@ -119,6 +119,13 @@
     var onlyD = core.computeStats(odPts, ROSTER, 'D');
     chk('filtro defensa: solo cuenta la D de Tato', [onlyD.players.p8.ds, onlyD.players.p4.ds], [1, 0]);
 
+    // Posesión en vivo y anulación de un gol (llamado)
+    chk('defensa: arranca defendiendo', core.interpret('', ROSTER, null, { start: 'them' }).possession, 'them');
+    chk('defensa: tras la D atacamos', core.interpret('D de Sara', ROSTER, null, { start: 'them' }).possession, 'us');
+    chk('ataque: tras el throwaway defendemos', core.interpret('Pipe a Mono, throwaway', ROSTER, null, { start: 'us' }).possession, 'them');
+    var anul = core.interpret('Pipe a Mono, gol, no fue gol, Mono a Sara', ROSTER);
+    chk('"no fue gol" anula y el punto sigue', [anul.events.map(fmt).join(' | '), anul.outcome], ['Pipe>Mono | Mono>Sara', null]);
+
     // Palabras no reconocidas se reportan para poder asignarlas como alias.
     var u = core.interpret('Pipe a Ramiro', ROSTER);
     results.push({ name: 'reporta palabra desconocida "ramiro"', ok: u.unknown.indexOf('ramiro') >= 0, expected: 'ramiro', got: u.unknown.join(',') });

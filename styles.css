@@ -370,3 +370,41 @@ body.focus .toast { bottom: 24px; }
 .pick svg { width: 16px; height: 16px; }
 .sheet-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .sheet-grid .btn svg { flex: none; }
+
+/* ---------- Chicos / chicas ---------- */
+.g-stack > .g-group + .g-group { margin-top: 10px; }
+.g-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 6px 2px; }
+.g-group.M .g-label { color: var(--accent-ink); }
+.pad-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 8px; }
+.pad-groups .pad-players { margin-bottom: 0; }
+.pad-players.two { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.pad-players.two .btn { font-size: 15px; padding: 6px 4px; }
+.g-group.M .pad-players .btn, .g-group.M .sheet-grid .btn:not(.current) { background: var(--accent-soft); color: var(--accent-ink); }
+.list li.g-head { border-bottom: 0; padding: 12px 0 2px; }
+.list li.g-head:first-child { padding-top: 4px; }
+
+/* ---------- Posesión en vivo ---------- */
+.poss { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 4px 12px 4px 10px; border-radius: 999px; font-weight: 800; font-size: 14px; animation: pop var(--base) var(--spring); }
+.poss:empty { visibility: hidden; }
+.poss svg { width: 16px; height: 16px; }
+.poss.us { background: var(--accent-soft); color: var(--accent-ink); }
+.poss.them { background: var(--sunk); color: var(--ink); }
+body.focus .poss { margin-top: -4px; }
+
+/* ---------- Cierre automático ---------- */
+.autoend {
+  position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 45;
+  max-width: 528px; margin: 0 auto; overflow: hidden;
+  background: var(--solid); color: var(--on-solid); border-radius: 20px; padding: 14px 14px 18px;
+  box-shadow: 0 14px 40px rgba(0,0,0,.3);
+  transform: translateY(30px) scale(.97); opacity: 0; transition: transform 300ms var(--spring), opacity var(--base);
+}
+.autoend.show { transform: none; opacity: 1; }
+.autoend b { font-size: 18px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.autoend .btn { background: color-mix(in srgb, var(--on-solid) 14%, transparent); color: var(--on-solid); }
+.autoend .btn.accent { background: var(--accent); color: var(--on-accent); }
+.ae-ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--accent); color: var(--on-accent); }
+.ae-ico.them { background: color-mix(in srgb, var(--on-solid) 14%, transparent); color: var(--on-solid); }
+.ae-ico svg { width: 22px; height: 22px; }
+.ae-progress { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: var(--accent); transform-origin: left; animation: ae-shrink linear forwards; }
+@keyframes ae-shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }

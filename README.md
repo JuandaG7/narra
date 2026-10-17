@@ -30,10 +30,13 @@ Todo funciona en el teléfono: plantilla, interpretación y estadísticas se gua
    - Números también sirven: `el 7 a el 12`
    Los nombres se buscan primero entre los 7 en cancha, así que hay muchas menos confusiones. Si se escucha
    a alguien de la banca, queda marcado para revisar.
+   Arriba se ve en vivo si estamos **atacando** o **defendiendo** (en un punto de defensa, tras una D atacamos;
+   el punto sigue contando como de defensa). Al detectar **gol** o **nos anotan**, el punto se cierra solo en
+   4 segundos; si fue un llamado, toca **No fue punto** (o di "no fue gol") y sigue.
 5. **Revisión** (en el mismo pull): cada evento es una frase; toca un nombre para cambiarlo, toca el tipo
    para cambiarlo, desliza a la izquierda o toca × para borrar (con "Deshacer"). Lo amarillo es dudoso.
    Las palabras no reconocidas se asignan a un jugador y quedan aprendidas. **Confirmar** y a la siguiente línea.
-6. Si la voz falla, durante el punto hay **botones** con los 7 de la línea y las acciones.
+6. Si la voz falla, durante el punto hay **botones** con los 7 de la línea, separados en chicos y chicas, y las acciones.
 7. **Stats**: marcador, **holds** (puntos de ataque ganados) y **breaks** (de defensa), tabla por jugador
    filtrable por ataque/defensa (+/-, goles, asistencias, D, drops, throwaways, pases, recepciones, puntos
    jugados), conexiones y lista de puntos editables. Exportable a CSV.
