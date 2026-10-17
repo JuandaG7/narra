@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="116" fill="#FF5A1F"/>
+  <!-- líneas de movimiento -->
+  <g stroke="#FFFFFF" stroke-linecap="round" stroke-width="18" opacity=".55">
+    <line x1="70" y1="318" x2="132" y2="304"/>
+    <line x1="92" y1="362" x2="168" y2="344"/>
+  </g>
+  <g transform="rotate(-12 280 250)">
+    <!-- canto -->
+    <path d="M128 250 v18 a152 72 0 0 0 304 0 v-18 z" fill="#B83A0C"/>
+    <!-- cara superior -->
+    <ellipse cx="280" cy="250" rx="152" ry="72" fill="#FFFFFF"/>
+    <!-- borde (aro) -->
+    <ellipse cx="280" cy="250" rx="126" ry="56" fill="none" stroke="#FFD2BF" stroke-width="9"/>
+    <!-- brillo -->
+    <ellipse cx="236" cy="226" rx="54" ry="16" fill="#FFFFFF" opacity=".9"/>
+  </g>
+</svg>

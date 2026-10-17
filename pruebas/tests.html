@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>UltiVoz pruebas</title>
+  <title>Demo · pruebas</title>
   <style>
     body { font: 15px/1.4 system-ui, sans-serif; margin: 0; padding: 16px; background: #f4f6f5; color: #14201b; }
     li { margin-bottom: 6px; } .ok { color: #0b8a55; } .fail { color: #c0392b; } code { font-size: 13px; }
@@ -18,7 +18,7 @@
   <p>Plantilla de prueba: Pipe 7, Mono 12, Juancho 3, Sara 9, Leo 5, Caro 21.</p>
   <input id="try" value="Pipe a Mono, Mono a Juancho, gol">
   <pre id="out"></pre>
-  <script src="core.js"></script>
+  <script src="../app/core.js"></script>
   <script src="tests.js"></script>
   <script>
     var r = runParserTests(UltiCore), fails = r.filter(function (t) { return !t.ok; }).length;

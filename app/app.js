@@ -1,4 +1,4 @@
-/* UltiVoz — interfaz. La interpretación y las estadísticas viven en core.js. */
+/* Demo (nombre provisional) — interfaz. La interpretación y las estadísticas viven en core.js. */
 (function () {
   'use strict';
   var Core = window.UltiCore;
@@ -696,7 +696,7 @@
     try {
       var f = new File([file.blob], file.name, { type: 'text/csv' });
       if (navigator.canShare && navigator.canShare({ files: [f] })) {
-        navigator.share({ files: [f], title: 'UltiVoz', text: 'Stats ' + (game.rival ? 'vs ' + game.rival : 'del partido') }).catch(function () {});
+        navigator.share({ files: [f], title: 'Demo', text: 'Stats ' + (game.rival ? 'vs ' + game.rival : 'del partido') }).catch(function () {});
         return;
       }
     } catch (e) { /* sin Web Share */ }
@@ -1091,14 +1091,14 @@
 
   // ---------- Compartir / pegar plantilla (texto simple, sirve por WhatsApp) ----------
   function rosterText() {
-    return ['Plantilla UltiVoz'].concat(sorted(roster).map(function (p) {
+    return ['Plantilla Demo'].concat(sorted(roster).map(function (p) {
       return [p.name, p.number || '', isMixed() && p.gender ? p.gender : ''].filter(Boolean).join(' ') +
         (p.aliases && p.aliases.length ? ' | ' + p.aliases.join(', ') : '');
     })).join('\n');
   }
   function shareRoster() {
     var text = rosterText();
-    if (navigator.share) { navigator.share({ title: 'Plantilla UltiVoz', text: text }).catch(function () {}); return; }
+    if (navigator.share) { navigator.share({ title: 'Plantilla Demo', text: text }).catch(function () {}); return; }
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text).then(function () { toast('Lista copiada: pégala en el otro celular'); }, function () { showText(text); });
     } else showText(text);
@@ -1115,7 +1115,7 @@
     var out = [];
     String(text || '').split(/\r?\n/).forEach(function (line) {
       line = line.trim();
-      if (!line || /^plantilla ultivoz/i.test(line)) return;
+      if (!line || /^plantilla( ultivoz| demo)?$/i.test(line)) return;
       var parts = line.split('|');
       var aliases = (parts[1] || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
       var number = '', gender = null, name = [];
@@ -1371,7 +1371,7 @@
     out.push('Holds,' + stats.holds.won + ',' + stats.holds.played, 'Breaks,' + stats.breaks.won + ',' + stats.breaks.played);
     return {
       blob: new Blob(['\ufeff' + out.join('\n')], { type: 'text/csv;charset=utf-8' }),
-      name: 'ultivoz-' + (game.rival ? Core.normalize(game.rival).replace(/ /g, '-') + '-' : '') + new Date().toISOString().slice(0, 10) + '.csv'
+      name: 'demo-' + (game.rival ? Core.normalize(game.rival).replace(/ /g, '-') + '-' : '') + new Date().toISOString().slice(0, 10) + '.csv'
     };
   }
 

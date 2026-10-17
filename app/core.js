@@ -1,5 +1,5 @@
 /*
- * UltiVoz — núcleo sin interfaz: interpretación de la narración y cálculo de estadísticas.
+ * Demo (nombre provisional) — núcleo sin interfaz: interpretación de la narración y cálculo de estadísticas.
  * Todo es determinístico y local (sin red). Se usa desde el navegador y desde las pruebas.
  */
 (function (root) {

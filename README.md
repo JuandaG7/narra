@@ -1,4 +1,4 @@
-# UltiVoz
+# Demo (nombre provisional)
 
 Prototipo para registrar estadísticas de ultimate **narrando el partido por voz** desde el celular.
 Todo funciona en el teléfono: plantilla, interpretación y estadísticas se guardan en el navegador
@@ -56,22 +56,19 @@ Todo funciona en el teléfono: plantilla, interpretación y estadísticas se gua
 python3 -m http.server 8000 --bind 0.0.0.0
 ```
 
-Abre http://localhost:8000. (En Claude Code ya está en `.claude/launch.json` como `ultivoz`.)
+Abre http://localhost:8000 (redirige a `app/`). En Claude Code ya está en `.claude/launch.json` como `ultivoz`.
 
-Pruebas del intérprete: abre http://localhost:8000/tests.html o, en la terminal de macOS:
+Pruebas del intérprete: abre http://localhost:8000/pruebas/tests.html o, en la terminal de macOS:
 
 ```bash
-./run_tests.sh
+pruebas/correr_pruebas.sh
 ```
 
 ## Publicarla para usarla en la cancha
 
-```bash
-./preparar_publicacion.sh
-```
-
-Crea la carpeta `publicar/`. Arrástrala a https://app.netlify.com/drop (con una cuenta gratis, el enlace
-queda fijo) y comparte el enlace https. Cada vez que cambie la app, repite y vuelve a arrastrarla al mismo sitio.
+La carpeta **`app/`** es la app completa. Arrástrala a https://app.netlify.com/drop (con una cuenta gratis,
+el enlace queda fijo) y comparte el enlace https. Para actualizarla: en el sitio, **Deploys** → arrastra otra
+vez la carpeta `app/`.
 
 ## Abrirla desde el celular (importante)
 
@@ -106,7 +103,8 @@ Para el primer entreno: lleva datos móviles y prueba ambos modos.
 
 ## Archivos
 
-- `core.js` — intérprete de la narración (normalización, coincidencia difusa de nombres con prioridad a la línea, máquina de estados), ataque/defensa, ABBA y estadísticas.
-- `app.js`, `index.html`, `styles.css` — interfaz.
-- `tests.js`, `tests.html`, `run_tests.sh` — pruebas del intérprete.
-- `sw.js`, `manifest.webmanifest` — funcionamiento sin conexión e instalación en pantalla de inicio.
+- `app/` — la app (esto es lo que se publica):
+  - `core.js` — intérprete de la narración (normalización, coincidencia difusa de nombres con prioridad a la línea, máquina de estados), ataque/defensa, ABBA y estadísticas.
+  - `app.js`, `index.html`, `styles.css` — interfaz.
+  - `sw.js`, `manifest.webmanifest`, `icon*.svg/png` — funcionamiento sin conexión e instalación en pantalla de inicio.
+- `pruebas/` — pruebas del intérprete (`tests.js`, `tests.html`, `correr_pruebas.sh`).

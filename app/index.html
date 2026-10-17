@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#F6F3EE" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121214" media="(prefers-color-scheme: dark)">
+  <title>Demo</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <meta name="apple-mobile-web-app-title" content="Demo">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top" id="top">
+    <div class="brand"><img class="logo" src="icon.svg" alt="" aria-hidden="true">Demo</div>
+    <div class="score num-font" id="score" aria-live="polite"></div>
+  </header>
+
+  <main>
+    <section id="view-game" class="view"></section>
+    <section id="view-roster" class="view" hidden></section>
+    <section id="view-stats" class="view" hidden></section>
+  </main>
+
+  <nav class="tabs" id="tabs">
+    <button data-view="game" class="active"><span data-icon="disc"></span>Partido</button>
+    <button data-view="roster"><span data-icon="users"></span>Plantilla</button>
+    <button data-view="stats"><span data-icon="chart"></span>Stats</button>
+  </nav>
+
+  <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true" hidden></div>
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script src="core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Ejecuta las pruebas del intérprete con el motor JavaScript de macOS (sin Node).
 cd "$(dirname "$0")"
-{ cat core.js tests.js; cat <<'JS'
+{ cat ../app/core.js tests.js; cat <<'JS'
 var r = runParserTests(UltiCore), fails = 0, out = [];
 r.forEach(function (t) {
   if (!t.ok) fails++;
