@@ -76,17 +76,20 @@
   var MARKERS = [
     ['xundox', /\b(borra|borrar|borralo|borrala|cancela|cancelar|corrijo|corrige|me equivoque|error mio|deshacer|deshaz|no fue (gol|punto)|anulado|anulalo|no vale)\b/g],
     ['xthemx', /\b(nos (anotan|anotaron|anota|anoto|meten|metieron|hacen|hicieron|marcan|marcaron)( el)?( punto| gol)?|(punto|gol|anotan|anotaron|marcan) (de|para) (ellos|el rival|los otros)|(anotan|anotaron) ellos|ellos (anotan|anotaron|marcan)|punto rival|gol rival)\b/g],
-    ['xoppx', /\b(la pierden|pierden ellos|ellos (la )?pierden|error de ellos|(turn|turnover|drop|throwaway) de ellos|se les cae|la dejan caer|la botan|la tiran afuera|recuperamos)\b/g],
+    ['xoppdx', /\b((drop|drope|trop) de ellos|ellos dropean|se les cae|se les cayo|la dejan caer)\b/g],
+    ['xoppx', /\b(la pierden|pierden ellos|ellos (la )?pierden|error de ellos|(turn|turnover|throwaway|throw away) de ellos|la botan|la tiran afuera|recuperamos)\b/g],
     ['xdropx', /\b(se le (cae|cayo)|la (deja|dejo) caer|se la come|dropea|dropeo|dropear|dropeada|drop|drope|drops|trop|drob)\b/g],
     ['xdx de', /\b((de|d|dee) de)\b/g],
     ['xdx', /\b(bloqueo|bloquea|bloqueada|bloqueado|block|bloc|blok|bloque|defensa|la tumba|tumba|la baja|dee|d)\b/g],
     ['xtax', /\b(throwaway|throw away|trowaway|trow away|trogue|tro guey|la pierde|la perdio|pierde|perdio|perdida|turnover|turn over|turn|la bota|la boto|bota|boto|afuera|fuera|stall|estol)\b/g],
     ['xgolx', /\b(go+l|golazo|punto|anota|anoto|score|marca|marco|adentro)\b/g]
   ];
-  var MARKER_TYPE = { xundox: 'undo', xthemx: 'them', xoppx: 'opp', xdropx: 'drop', xdx: 'd', xtax: 'ta', xgolx: 'goal' };
+  var MARKER_TYPE = { xundox: 'undo', xthemx: 'them', xoppx: 'opp', xoppdx: 'oppdrop', xdropx: 'drop', xdx: 'd', xtax: 'ta', xgolx: 'goal' };
 
-  function applyMarkers(norm) {
+  function applyMarkers(norm, rival) {
     var s = ' ' + norm + ' ';
+    // El nombre del rival cuenta como "ellos": "drop de Tigres", "punto de Tigres"…
+    if (rival) s = s.split(' ' + rival + ' ').join(' ellos ');
     MARKERS.forEach(function (m) { s = s.replace(m[1], ' ' + m[0] + ' '); });
     return s.replace(/\s+/g, ' ').trim();
   }
@@ -153,12 +156,12 @@
     return b;
   }
 
-  function tokenize(text, roster, line) {
+  function tokenize(text, roster, line, rival) {
     line = (line || []).filter(function (id) { return (roster || []).some(function (p) { return p.id === id; }); });
     var mAll = buildMatcher(roster);
     var mLine = line.length ? buildMatcher(roster.filter(function (p) { return line.indexOf(p.id) >= 0; })) : null;
     var norm = normalize(text);
-    var tokens = applyMarkers(norm).split(' ').filter(Boolean);
+    var tokens = applyMarkers(norm, rival ? normalize(rival) : '').split(' ').filter(Boolean);
     var items = [];
     var unknown = [];
     var i = 0;
@@ -209,7 +212,7 @@
 
   // opts.start: quién tiene el disco al empezar ('us' en ataque, 'them' en defensa).
   function interpret(text, roster, line, opts) {
-    var tk = tokenize(text, roster, line);
+    var tk = tokenize(text, roster, line, opts && opts.rival);
     var items = tk.items;
     var state = { events: [], holder: null, holderUnc: null, outcome: null };
     var history = [];
@@ -319,6 +322,11 @@
         case 'them':
           push({ type: 'them' });
           state.outcome = 'them';
+          state.holder = null;
+          break;
+
+        case 'oppdrop':
+          push({ type: 'opp', kind: 'drop' });
           state.holder = null;
           break;
 

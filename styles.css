@@ -417,3 +417,8 @@ body.focus .poss { margin-top: -4px; }
 .final-score { display: flex; justify-content: center; align-items: center; gap: 18px; font-size: 64px; font-weight: 800; line-height: 1; animation: pop 500ms var(--spring); }
 .final-score .dash { color: var(--muted); font-size: 34px; }
 .final-result { margin-top: 10px; display: inline-block; padding: 6px 14px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; font-size: 14px; }
+
+/* Botones de errores del rival (cuando ellos tienen el disco) */
+.pad-actions .btn.opp { background: transparent; box-shadow: inset 0 0 0 2px var(--line); color: var(--ink); animation: pop var(--base) var(--spring); }
+.pad-actions .btn.opp { line-height: 1.1; }
+.pad-actions .btn.opp small { display: block; font-size: 11px; font-weight: 700; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }

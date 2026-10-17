@@ -129,6 +129,12 @@
     var anul = core.interpret('Pipe a Mono, gol, no fue gol, Mono a Sara', ROSTER);
     chk('"no fue gol" anula y el punto sigue', [anul.events.map(fmt).join(' | '), anul.outcome], ['Pipe>Mono | Mono>Sara', null]);
 
+    // Errores del rival sin D, también con su nombre
+    var opp1 = core.interpret('nos tiran, drop de ellos, Sara a Leo', ROSTER, null, { start: 'them' });
+    chk('drop de ellos → recuperamos y atacamos', [opp1.events.map(fmt).join(' | '), opp1.events[0].kind, opp1.possession], ['PIERDEN | Sara>Leo', 'drop', 'us']);
+    var opp2 = core.interpret('throwaway de Tigres, Pipe a Mono, punto de Tigres', ROSTER, null, { rival: 'Tigres' });
+    chk('nombre del rival = ellos', [opp2.events.map(fmt).join(' | '), opp2.outcome], ['PIERDEN | Pipe>Mono | ELLOS', 'them']);
+
     // Palabras no reconocidas se reportan para poder asignarlas como alias.
     var u = core.interpret('Pipe a Ramiro', ROSTER);
     results.push({ name: 'reporta palabra desconocida "ramiro"', ok: u.unknown.indexOf('ramiro') >= 0, expected: 'ramiro', got: u.unknown.join(',') });

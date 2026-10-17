@@ -107,6 +107,12 @@
     return useAbba() ? Core.ratioFor(scoredBefore(game.points.length), game.firstRatio) : null;
   }
 
+  function rivalName() { return game.rival || 'ellos'; }
+  function rivalShort() { return game.rival && game.rival.length <= 9 ? game.rival : 'ellos'; }
+  function interp(text, withStart) {
+    return Core.interpret(text, roster, lineIds(), { rival: game.rival, start: withStart ? (pointType() === 'O' ? 'us' : 'them') : null });
+  }
+
   function describe(ev) {
     var n = playerName;
     switch (ev.type) {
@@ -116,12 +122,12 @@
       case 'throwaway': return 'Throwaway de ' + n(ev.from);
       case 'd': return 'D de ' + n(ev.player);
       case 'them': return 'Punto de ellos';
-      case 'opp': return 'Pierden ellos';
+      case 'opp': return (ev.kind === 'drop' ? 'Drop de ' : 'Error de ') + rivalName();
     }
     return ev.type;
   }
   var EV_ICON = { pass: 'arrow', goal: 'flag', drop: 'drop', throwaway: 'throw', d: 'block', them: 'x', opp: 'swap' };
-  var EV_LABEL = { pass: 'Pase', goal: 'Gol', drop: 'Drop', throwaway: 'Throwaway', d: 'D', them: 'Nos anotan', opp: 'Pierden ellos' };
+  var EV_LABEL = { pass: 'Pase', goal: 'Gol', drop: 'Drop', throwaway: 'Throwaway', d: 'D', them: 'Nos anotan', opp: 'Error rival' };
 
   // ---------- Aviso con deshacer ----------
   var toastTimer = null;
@@ -381,7 +387,7 @@
   }
   function toReview() {
     var d = game.draft;
-    var r = Core.interpret(d.transcript, roster, lineIds());
+    var r = interp(d.transcript);
     d.events = r.events; d.unknown = r.unknown; d.phase = 'review';
     reviewAnimate = true;
     saveGame();
@@ -733,9 +739,11 @@
         return el('button', { class: 'btn', type: 'button', text: p.name, onclick: function (e) { tapAnim(e.currentTarget); appendText(p.name); renderLive(); } });
       }, isMixed() ? 'pad-players two' : 'pad-players', 'cols'),
       el('div', { class: 'pad-actions' }, [
-        ['drop', 'Drop'], ['throwaway', 'Throwaway'], ['D de', 'D de…'], ['gol', 'Gol', 'accent'], ['nos anotan', 'Nos anotan', 'solid'], ['borra', 'Deshacer', 'ghost']
+        ['drop', 'Drop', '', 'pa-1'], ['throwaway', 'Throwaway', '', 'pa-2'], ['D de', 'D de…'], ['gol', 'Gol', 'accent'], ['nos anotan', 'Nos anotan', 'solid'], ['borra', 'Deshacer', 'ghost']
       ].map(function (a) {
-        return el('button', { class: 'btn ' + (a[2] || ''), type: 'button', text: a[1], onclick: function (e) { tapAnim(e.currentTarget); appendText(a[0]); renderLive(); } });
+        var b = el('button', { class: 'btn ' + (a[2] || ''), id: a[3] || null, type: 'button', text: a[1], onclick: function (e) { tapAnim(e.currentTarget); appendText(b.dataset.say); renderLive(); } });
+        b.dataset.say = a[0];
+        return b;
       }))
     ]);
     v.appendChild(pad);
@@ -752,7 +760,7 @@
     t.innerHTML = '';
     t.appendChild(document.createTextNode(d.transcript || (interim ? '' : '…')));
     if (interim) t.appendChild(el('span', { class: 'interim', text: ' ' + interim }));
-    var r = Core.interpret(d.transcript + ' ' + interim, roster, lineIds(), { start: pointType() === 'O' ? 'us' : 'them' });
+    var r = interp(d.transcript + ' ' + interim, true);
     var pe = $('poss');
     if (pe) {
       var pk = r.possession || '';
@@ -764,7 +772,15 @@
       }
     }
     // Cierre automático: al detectar gol o punto de ellos (solo con texto ya confirmado).
-    var settled = interim ? Core.interpret(d.transcript, roster, lineIds()) : r;
+    var settled = interim ? interp(d.transcript) : r;
+    // Con el disco en manos de ellos, los primeros botones registran SUS errores (sin necesidad de una D).
+    var theirs = r.possession === 'them';
+    [['pa-1', theirs ? ['drop de ellos', 'Drop'] : ['drop', 'Drop']],
+     ['pa-2', theirs ? ['throwaway de ellos', 'Throwaway'] : ['throwaway', 'Throwaway']]].forEach(function (x) {
+      var b = $(x[0]); if (!b || b.dataset.say === x[1][0]) return;
+      b.dataset.say = x[1][0]; b.textContent = x[1][1]; b.classList.toggle('opp', theirs);
+      if (theirs) b.appendChild(el('small', { text: rivalShort() }));
+    });
     if (!settled.outcome) autoEndBlocked = false;
     if (settled.outcome && !autoEndBlocked && !autoEnd) startAutoEnd(settled);
     else if (!settled.outcome && autoEnd) clearAutoEnd();
@@ -841,7 +857,7 @@
     d.events.forEach(function (ev, idx) { ol.appendChild(eventRow(ev, idx, animate)); });
     v.appendChild(ol);
 
-    v.appendChild(el('div', { class: 'add-row' }, [['pass', 'Pase'], ['goal', 'Gol'], ['drop', 'Drop'], ['throwaway', 'Throwaway'], ['d', 'D'], ['them', 'Nos anotan'], ['opp', 'Pierden ellos']].map(function (a) {
+    v.appendChild(el('div', { class: 'add-row' }, [['pass', 'Pase'], ['goal', 'Gol'], ['drop', 'Drop'], ['throwaway', 'Throwaway'], ['d', 'D'], ['them', 'Nos anotan'], ['opp', 'Error de ' + rivalShort()]].map(function (a) {
       return el('button', { class: 'btn small', type: 'button', icon: 'plus', onclick: function () {
         var ev = EMPTY[a[0]](); d.events.push(ev); saveGame(); render();
         var f = FIELDS[ev.type][0];
@@ -1362,7 +1378,7 @@
   // ---------- Inicio ----------
   // Si se recargó a mitad de un punto, pasamos a revisión para no perder lo narrado.
   if (game.draft && game.draft.phase === 'recording') {
-    var rr = Core.interpret(game.draft.transcript, roster, lineIds());
+    var rr = interp(game.draft.transcript);
     game.draft.events = rr.events; game.draft.unknown = rr.unknown; game.draft.phase = 'review';
     saveGame(); reviewAnimate = true;
   }
