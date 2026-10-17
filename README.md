@@ -41,7 +41,12 @@ Todo funciona en el teléfono: plantilla, interpretación y estadísticas se gua
    para cambiarlo, desliza a la izquierda o toca × para borrar (con "Deshacer"). Lo amarillo es dudoso.
    Las palabras no reconocidas se asignan a un jugador y quedan aprendidas. **Confirmar** y a la siguiente línea.
 6. Si la voz falla, durante el punto hay **botones** con los 7 de la línea, separados en chicos y chicas, y las acciones.
-7. **Stats**: marcador, **holds** (puntos de ataque ganados) y **breaks** (de defensa), tabla por jugador
+7. **Terminar partido** (o Reiniciar) desde la pantalla entre puntos: muestra el resumen final (marcador,
+   líderes, conexión del partido) y **Compartir resultados** manda el CSV por WhatsApp o correo.
+   Si confirmas un punto sin resultado, la app pregunta cómo terminó (para no descuadrar el marcador).
+8. **Compartir la plantilla**: en Plantilla, "Compartir lista" la manda como texto; en el otro celular,
+   "Pegar lista" la carga (formato: `Pipe 7 H | pipa`).
+9. **Stats**: marcador, **holds** (puntos de ataque ganados) y **breaks** (de defensa), tabla por jugador
    filtrable por ataque/defensa (+/-, goles, asistencias, D, drops, throwaways, pases, recepciones, puntos
    jugados), conexiones y lista de puntos editables. Exportable a CSV.
 
@@ -58,6 +63,15 @@ Pruebas del intérprete: abre http://localhost:8000/tests.html o, en la terminal
 ```bash
 ./run_tests.sh
 ```
+
+## Publicarla para usarla en la cancha
+
+```bash
+./preparar_publicacion.sh
+```
+
+Crea la carpeta `publicar/`. Arrástrala a https://app.netlify.com/drop (con una cuenta gratis, el enlace
+queda fijo) y comparte el enlace https. Cada vez que cambie la app, repite y vuelve a arrastrarla al mismo sitio.
 
 ## Abrirla desde el celular (importante)
 

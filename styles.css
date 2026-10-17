@@ -409,3 +409,11 @@ body.focus .poss { margin-top: -4px; }
 .ae-progress { position: absolute; left: 0; bottom: 0; height: 4px; width: 100%; background: var(--accent); transform-origin: left; animation: ae-shrink linear forwards; }
 @keyframes ae-shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 .points li.g-head { border-bottom: 0; padding: 12px 0 2px; }
+
+/* ---------- Acciones del partido y final ---------- */
+.game-actions { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.game-actions .btn { color: var(--muted); }
+.final { text-align: center; padding: 20px 14px; }
+.final-score { display: flex; justify-content: center; align-items: center; gap: 18px; font-size: 64px; font-weight: 800; line-height: 1; animation: pop 500ms var(--spring); }
+.final-score .dash { color: var(--muted); font-size: 34px; }
+.final-result { margin-top: 10px; display: inline-block; padding: 6px 14px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; font-size: 14px; }
