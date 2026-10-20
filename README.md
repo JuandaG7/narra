@@ -50,6 +50,21 @@ Todo funciona en el teléfono: plantilla, interpretación y estadísticas se gua
    filtrable por ataque/defensa (+/-, goles, asistencias, D, drops, throwaways, pases, recepciones, puntos
    jugados), conexiones y lista de puntos editables. Exportable a CSV.
 
+## Novedades (pruebas en partidos)
+
+- **Plantilla pegada:** entiende listas numeradas o con viñetas, "F/M", "chica/chico", ♀/♂. Si no dice el género,
+  lo adivina por el nombre (Sara, Mafe, Camila → chica) y lo marca con borde naranja; toca la letra H/M para cambiarla.
+- **Voz más precisa:** usa la mejor de varias interpretaciones del celular, es más tolerante con los nombres de
+  los 7 en cancha, ignora la charla de banca ("corre", "mira", "marca") y evita pases duplicados de Chrome en Android.
+- **Más estable:** se reengancha al instante cuando Chrome corta, se detiene sola si falla muchas veces seguidas
+  (en vez de trabar el celular), retoma la voz al volver a la app y mantiene la pantalla encendida.
+  Si la app se cierra grabando, lo narrado queda a salvo. En Plantilla aparece "Enviar reporte" si hubo errores.
+- **Durante el punto:** estado de la voz (Escuchando / Conectando / En pausa), lo que está oyendo en grande,
+  vibración corta por cada evento entendido y botón para pausar la voz.
+- **Partidos guardados:** cada partido terminado queda en el celular. En Stats puedes ver el actual, cada partido
+  guardado o la **Temporada** (todo sumado). Exporta CSV (con detalle punto por punto), **Enviar partido** a otro
+  celular (archivo) e **Importar** para juntar todo en el del capitán, más un **Respaldo completo**.
+
 ## Correr en el computador
 
 ```bash

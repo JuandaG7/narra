@@ -60,7 +60,11 @@
    'claro listo vamos venga oye mira hombre parce mano man tiene tira tiro lanza lanzo recibe recibio ' +
    'agarra atrapa coge cogio larga largo corta corto hacia hasta luego entonces otra vez nada todo ' +
    'ellos ellas nosotros nos les salen sale entra pull lado medio rapido manda mando abre abierto ' +
-   'numero hace hizo')
+   'numero hace hizo corre corran corrio toma mira arriba abajo cuidado fuerte uy uf juega juegue pasala ' +
+   'espera calma tranquilo tranquila atras adelante cerrado profundo huddle stack cup zona hammer flick ' +
+   'backhand forehand scoober pivot pivote marca marcalo marcala cubre cubrela hay ay ojo listos lista ' +
+   'cambio cambia tiempo time timeout pull pullea suave duro alto bajo bueno buenisimo bravo vamo ' +
+   'otra una dos tres esa ese aca alla vale venga')
     .split(' ').forEach(function (w) { if (w) STOPWORDS[w] = true; });
 
   var NUMBER_WORDS = {
@@ -82,7 +86,7 @@
     ['xdx de', /\b((de|d|dee) de)\b/g],
     ['xdx', /\b(bloqueo|bloquea|bloqueada|bloqueado|block|bloc|blok|bloque|defensa|la tumba|tumba|la baja|dee|d)\b/g],
     ['xtax', /\b(throwaway|throw away|trowaway|trow away|trogue|tro guey|la pierde|la perdio|pierde|perdio|perdida|turnover|turn over|turn|la bota|la boto|bota|boto|afuera|fuera|stall|estol)\b/g],
-    ['xgolx', /\b(go+l|golazo|punto|anota|anoto|score|marca|marco|adentro)\b/g]
+    ['xgolx', /\b(go+l|golazo|punto|anota|anoto|score|scorea|scoreo)\b/g]
   ];
   var MARKER_TYPE = { xundox: 'undo', xthemx: 'them', xoppx: 'opp', xoppdx: 'oppdrop', xdropx: 'drop', xdx: 'd', xtax: 'ta', xgolx: 'goal' };
 
@@ -148,9 +152,29 @@
 
   // Busca primero entre los de la línea (aunque sea por parecido: lo normal es que el celular
   // escuche mal a alguien que está jugando). Si no aparece, en toda la plantilla, marcado "fuera de línea".
+  // Con solo 7 en cancha podemos ser más tolerantes: si una palabra se parece claramente
+  // a UNO de ellos (y a ningún otro), la tomamos como ese jugador, marcada como dudosa.
+  function looseLineMatch(compact, mLine) {
+    if (!mLine || compact.length < 3 || STOPWORDS[compact]) return null;
+    var ph = phonetic(compact), best = null, bestDist = Infinity, tie = false;
+    mLine.keys.forEach(function (k) {
+      var d = levenshtein(ph, k.phon);
+      var len = Math.max(ph.length, k.phon.length);
+      var limit = len <= 4 ? 1 : len <= 7 ? 2 : 3;
+      if (d > limit) return;
+      if (d < bestDist) { best = k.id; bestDist = d; tie = false; }
+      else if (d === bestDist && k.id !== best) tie = true;
+    });
+    return best && !tie ? { id: best, dist: Math.max(1, bestDist) } : null;
+  }
+
   function lookupName(compact, mLine, mAll, line, allowStop) {
     var a = mLine ? matchName(compact, mLine, allowStop) : null;
     if (a) return a;
+    var exactAll = matchName(compact, mAll, allowStop);
+    if (exactAll && exactAll.dist === 0) { if (mLine && line.indexOf(exactAll.id) < 0) exactAll.offLine = true; return exactAll; }
+    var loose = allowStop ? null : looseLineMatch(compact, mLine);
+    if (loose) return loose;
     var b = matchName(compact, mAll, allowStop);
     if (b && mLine && line.indexOf(b.id) < 0) b.offLine = true;
     return b;
@@ -444,6 +468,36 @@
     return { players: players, score: score, connections: connections, holds: od.O, breaks: od.D };
   }
 
+  // ---------- Género por el nombre (para pegar listas sin H/M) ----------
+  var FEMALE = {};
+  ('ana sara sofi sofia isa isabel isabella vale valen valeria valentina caro carolina cata catalina mafe majo mari maria ' +
+   'pao paola lore lorena gabi gabriela nati natalia tati tatiana vane vanessa male mile milena moni monica clau claudia ' +
+   'lu luisa luz sol abril rocio carmen raquel ruth ines beatriz pili belen yuli leidy lady jenny karen kelly nicole ' +
+   'michelle ingrid astrid esther miriam noemi maribel elizabeth ivonne flor mar laura juana manu manuela mariana ' +
+   'daniela camila cami cata luci lucia ceci cecilia dulce estefa estefania steffi xime ximena jime jimena ' +
+   'paula pau andrea angie angela adri adriana eli elena emi emilia emma julieta julia lina liz meli ' +
+   'melissa mile nancy nata ori pia rosa sami samanta susi tere teresa vero veronica vicky yeni yesi zoe ivon ' +
+   'margarita marce marcela lili liliana diana dayana ingrid kata kathe karla karol mile mona nena')
+    .split(' ').forEach(function (n) { if (n) FEMALE[n] = true; });
+  var MALE_A = { luca: 1, joshua: 1, bautista: 1, nikita: 1, sasha: 1, garza: 1, pancha: 0, juancha: 0, jona: 1, jhona: 1, kika: 0 };
+  function guessGender(name) {
+    var n = normalize(name).split(' ')[0];
+    if (!n) return null;
+    if (FEMALE[n]) return 'M';
+    if (MALE_A[n]) return 'H';
+    if (/a$/.test(n) && n.length > 2) return 'M';
+    return null;
+  }
+
+  // Qué tan "entendible" es un texto: cuántos jugadores y eventos reconoce (para elegir
+  // la mejor de las alternativas que da el reconocimiento de voz).
+  function scoreText(text, roster, line, opts) {
+    var tk = tokenize(text, roster, line, opts && opts.rival);
+    var sc = 0;
+    tk.items.forEach(function (it) { sc += it.kind === 'player' ? (it.dist === 0 ? 3 : 2) - (it.offLine ? 1 : 0) : 2; });
+    return sc - tk.unknown.length;
+  }
+
   var api = {
     normalize: normalize,
     phonetic: phonetic,
@@ -453,7 +507,9 @@
     outcomeOf: outcomeOf,
     nextPointType: nextPointType,
     ratioFor: ratioFor,
-    computeStats: computeStats
+    computeStats: computeStats,
+    guessGender: guessGender,
+    scoreText: scoreText
   };
   root.UltiCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

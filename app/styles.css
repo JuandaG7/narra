@@ -422,3 +422,34 @@ body.focus .poss { margin-top: -4px; }
 .pad-actions .btn.opp { background: transparent; box-shadow: inset 0 0 0 2px var(--line); color: var(--ink); animation: pop var(--base) var(--spring); }
 .pad-actions .btn.opp { line-height: 1.1; }
 .pad-actions .btn.opp small { display: block; font-size: 11px; font-weight: 700; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Estado de la voz durante el punto ---------- */
+.voice-row { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; min-height: 34px; }
+.voice-row .btn { min-height: 32px; padding: 4px 10px; font-size: 13px; color: var(--muted); }
+.voice-row .btn svg { width: 16px; height: 16px; }
+.voice-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; padding: 5px 11px; border-radius: 999px; background: var(--sunk); color: var(--muted); }
+.voice-pill:empty { display: none; }
+.voice-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.voice-pill.listening { background: var(--accent-soft); color: var(--accent-ink); }
+.voice-pill.listening::before { animation: live 1.2s ease-in-out infinite; }
+.voice-pill.restarting::before { animation: live .5s ease-in-out infinite; }
+.voice-pill.error { background: var(--unc); color: var(--unc-ink); }
+@keyframes live { 50% { opacity: .25; } }
+.heard-now { text-align: center; font-size: 18px; font-weight: 700; font-style: italic; min-height: 1.5em; margin-top: 6px; padding: 0 8px;
+  color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity 600ms var(--ease), color var(--base); }
+.heard-now.final { color: var(--ink); }
+.heard-now.fade { opacity: .35; }
+.rec-status:empty { display: none; }
+body.focus .rec-wrap { padding: 8px 0 0; }
+
+/* H/M tocable en la plantilla; punteado si fue adivinado por el nombre */
+.g-tag.g-toggle { border: 0; width: 28px; height: 28px; border-radius: 8px; font-size: 12px; cursor: pointer; transition: transform var(--fast) var(--spring); }
+.g-tag.g-toggle:active { transform: scale(.88); }
+.g-tag.guessed { box-shadow: inset 0 0 0 2px var(--warn); background: transparent; }
+
+/* Grabación compacta: cabe en una pantalla de celular sin hacer scroll */
+body.focus .rec-btn.recording { width: 100px; height: 100px; }
+body.focus .view > * + * { margin-top: 8px; }
+.live-card { padding: 10px; }
+body.focus .heard-now { margin-top: 2px; font-size: 17px; }
+body.focus .point-head .title { font-size: 22px; }

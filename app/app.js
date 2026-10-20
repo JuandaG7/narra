@@ -35,7 +35,11 @@
     block: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
     flag: '<path d="M5 21V4h12l-2.5 4L17 12H5"/>',
     swap: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>',
-    chevron: '<path d="M7 10l5 5 5-5"/>'
+    chevron: '<path d="M7 10l5 5 5-5"/>',
+    pause: '<path d="M9 5v14M15 5v14"/>',
+    download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+    upload: '<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>',
+    share: '<circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/>'
   };
   function svg(name) {
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[name] + '</svg>';
@@ -64,10 +68,11 @@
   var lines = load(KEYS.lines, []);
   var settings = Object.assign({ lang: 'es-CO', local: false, division: 'mixto', mixedRule: 'abba' }, load(KEYS.settings, {}));
   function newGame() {
-    return { started: false, rival: '', startType: 'O', firstRatio: '4M', points: [], line: [], draft: null, typeOverride: null, halftime: null };
+    return { id: uid('g'), createdAt: Date.now(), started: false, rival: '', startType: 'O', firstRatio: '4M', points: [], line: [], draft: null, typeOverride: null, halftime: null };
   }
   var game = Object.assign(newGame(), load(KEYS.game, {}) || {});
   if (game.points.length && !game.started) game.started = true; // datos de la versión anterior
+  if (!game.createdAt) game.createdAt = Date.now();
   function saveRoster() { save(KEYS.roster, roster); }
   function saveLines() { save(KEYS.lines, lines); }
   function saveGame() { save(KEYS.game, game); }
@@ -113,8 +118,8 @@
     return Core.interpret(text, roster, lineIds(), { rival: game.rival, start: withStart ? (pointType() === 'O' ? 'us' : 'them') : null });
   }
 
-  function describe(ev) {
-    var n = playerName;
+  function describe(ev, nameFn) {
+    var n = nameFn || playerName;
     switch (ev.type) {
       case 'pass': return n(ev.from) + ' → ' + n(ev.to);
       case 'goal': return 'Gol de ' + n(ev.scorer) + (ev.assist ? ' · asist. ' + n(ev.assist) : '');
@@ -251,6 +256,7 @@
   // ---------- Voz (punto) ----------
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   var rec = null, wantListening = false, finalsCommitted = 0, interim = '', wakeLock = null;
+  var lastFinalNorm = '', restartLog = [], voicePaused = false, voiceState = 'off';
 
   function voiceProblem() {
     if (!SR) return 'Este navegador no reconoce voz. Usa Chrome (Android) o Safari (iPhone). Mientras tanto, usa los botones.';
@@ -258,6 +264,26 @@
     return null;
   }
   function setStatus(t) { var s = $('rec-status'); if (s) s.textContent = t || ''; }
+
+  // Estado visible de la voz: escuchando / reconectando / en pausa / error.
+  var VOICE_TEXT = { listening: 'Escuchando', restarting: 'Conectando…', paused: 'Voz en pausa', error: 'Voz detenida', off: '' };
+  function setVoiceState(st, msg) {
+    voiceState = st;
+    var pill = $('voice-pill');
+    if (pill) {
+      pill.className = 'voice-pill ' + st;
+      pill.textContent = VOICE_TEXT[st] || '';
+    }
+    var pb = $('pause-btn');
+    if (pb) {
+      pb.innerHTML = '';
+      pb.insertAdjacentHTML('afterbegin', svg(st === 'paused' || st === 'error' ? 'mic' : 'pause'));
+      pb.appendChild(document.createTextNode(st === 'paused' || st === 'error' ? ' Reanudar voz' : ' Pausar voz'));
+      pb.hidden = !!voiceProblem();
+    }
+    recBtnClass('mute', st !== 'listening' && st !== 'restarting');
+    if (msg !== undefined) setStatus(msg);
+  }
 
   function appendText(piece) {
     var d = game.draft;
@@ -267,56 +293,119 @@
     saveGame();
   }
 
+  // Chrome en Android a veces repite lo ya dicho en cada resultado ("pipe a mono", "pipe a mono mono a sara"):
+  // solo agregamos lo nuevo para no inventar pases.
+  function commitFinal(text) {
+    var n = Core.normalize(text);
+    if (!n) return;
+    if (n === lastFinalNorm) return;
+    var add = text;
+    if (lastFinalNorm && n.indexOf(lastFinalNorm + ' ') === 0) add = n.slice(lastFinalNorm.length).trim();
+    lastFinalNorm = n;
+    appendText(add);
+    showHeard(add, true);
+  }
+
+  // De las alternativas que da el celular, usamos la que reconoce más jugadores y eventos.
+  function bestAlternative(res) {
+    var best = res[0] ? res[0].transcript : '';
+    if (res.length < 2) return best;
+    var opts = { rival: game.rival }, bestScore = Core.scoreText(best, roster, lineIds(), opts);
+    for (var i = 1; i < res.length; i++) {
+      var sc = Core.scoreText(res[i].transcript, roster, lineIds(), opts);
+      if (sc > bestScore) { best = res[i].transcript; bestScore = sc; }
+    }
+    return best;
+  }
+
   function recBtnClass(cls, on) { var b = $('rec-btn'); if (b) b.classList.toggle(cls, on); }
   function blip() { var b = $('rec-btn'); if (!b) return; b.classList.remove('blip'); void b.offsetWidth; b.classList.add('blip'); }
 
+  function keepAwake() {
+    if (!navigator.wakeLock || wakeLock) return;
+    navigator.wakeLock.request('screen').then(function (w) {
+      wakeLock = w;
+      w.addEventListener('release', function () { if (wakeLock === w) wakeLock = null; });
+    }).catch(function () {});
+  }
+
   function startListening() {
     if (voiceProblem()) return;
-    wantListening = true;
+    wantListening = true; voicePaused = false;
+    if (voiceState !== 'listening') voiceState = 'restarting';
     var r = new SR();
     rec = r;
     r.lang = settings.lang || 'es-CO';
     r.continuous = true;
     r.interimResults = true;
-    r.maxAlternatives = 1;
+    r.maxAlternatives = 4;
     if (settings.local && 'processLocally' in r) { try { r.processLocally = true; } catch (e) { /* no soportado */ } }
+    // Nota: no usamos "phrases" (pistas de nombres): en Chrome con reconocimiento en la nube
+    // da "phrases-not-supported" y corta la voz una y otra vez.
     finalsCommitted = 0; interim = '';
     r.onresult = function (e) {
-      var tmp = '';
-      for (var i = finalsCommitted; i < e.results.length; i++) {
-        var res = e.results[i];
-        if (res.isFinal && i === finalsCommitted) { appendText(res[0].transcript); finalsCommitted = i + 1; }
-        else tmp += ' ' + res[0].transcript;
-      }
-      interim = tmp.trim();
-      blip();
-      renderLive();
+      try {
+        var tmp = '';
+        for (var i = finalsCommitted; i < e.results.length; i++) {
+          var res = e.results[i];
+          if (!res || !res.length) continue;
+          if (res.isFinal) { commitFinal(bestAlternative(res)); finalsCommitted = i + 1; tmp = ''; }
+          else tmp += ' ' + res[0].transcript;
+        }
+        interim = tmp.trim();
+        if (interim) showHeard(interim, false);
+        setVoiceState('listening');
+        blip();
+        renderLive();
+      } catch (err) { logError('onresult: ' + err.message); }
     };
+    r.onstart = function () { setVoiceState('listening', ''); };
     r.onspeechstart = function () { recBtnClass('hearing', true); };
     r.onspeechend = function () { recBtnClass('hearing', false); };
     r.onerror = function (e) {
-      if (['not-allowed', 'service-not-allowed', 'network', 'language-not-supported'].indexOf(e.error) >= 0) recBtnClass('mute', true);
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        wantListening = false; setStatus('Sin micrófono: usa los botones.');
+        wantListening = false; setVoiceState('error', 'Sin permiso de micrófono: usa los botones o revisa los permisos.');
       } else if (e.error === 'network') {
-        wantListening = false; setStatus('Sin señal para la voz: usa los botones.');
+        wantListening = false; setVoiceState('error', 'Sin señal para la voz: usa los botones.');
       } else if (e.error === 'language-not-supported') {
-        wantListening = false; setStatus('Ese idioma no está descargado para reconocer sin internet. Desactiva la opción en Plantilla.');
+        wantListening = false; setVoiceState('error', 'Ese idioma no está descargado. Desactiva "sin internet" en Plantilla.');
+      } else if (e.error === 'audio-capture') {
+        setVoiceState('restarting', 'Otro programa está usando el micrófono.');
       } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
-        setStatus('Error de voz: ' + e.error);
+        logError('voz: ' + e.error);
       }
     };
     r.onend = function () {
       r.ended = true;
       recBtnClass('hearing', false);
-      if (interim) { appendText(interim); interim = ''; }
-      // Chrome corta el modo continuo tras silencios: reiniciamos mientras el punto siga abierto.
+      if (interim) { commitFinal(interim); interim = ''; }
+      // Chrome corta el modo continuo tras silencios: reiniciamos de inmediato mientras el punto siga abierto,
+      // pero si se corta muchas veces seguidas paramos (evita que el celular se trabe).
       if (wantListening && rec === r && game.draft && game.draft.phase === 'recording') {
-        setTimeout(function () { if (wantListening && rec === r) startListening(); }, 250);
+        var now = Date.now();
+        restartLog = restartLog.filter(function (t) { return now - t < 15000; });
+        restartLog.push(now);
+        if (restartLog.length > 8) {
+          wantListening = false; rec = null;
+          setVoiceState('error', 'La voz se cortó varias veces. Toca "Reanudar voz" o usa los botones.');
+          buzz([80, 80, 80]);
+          return;
+        }
+        setVoiceState('restarting');
+        setTimeout(function () { if (wantListening && rec === r) startListening(); }, 30);
       } else renderLive();
     };
-    try { r.start(); setStatus('Escuchando…'); } catch (e) { setStatus('No pude abrir el micrófono.'); }
-    if (navigator.wakeLock && !wakeLock) navigator.wakeLock.request('screen').then(function (w) { wakeLock = w; }).catch(function () {});
+    try { r.start(); } catch (e) { logError('start: ' + e.message); setVoiceState('error', 'No pude abrir el micrófono. Toca "Reanudar voz".'); }
+    keepAwake();
+  }
+
+  function pauseListening() {
+    voicePaused = true;
+    stopListening(function () { setVoiceState('paused', 'Voz en pausa. Los botones siguen funcionando.'); });
+  }
+  function toggleVoice() {
+    if (voiceState === 'paused' || voiceState === 'error') { restartLog = []; startListening(); setVoiceState('restarting', ''); }
+    else pauseListening();
   }
 
   function stopListening(cb) {
@@ -324,12 +413,49 @@
     if (wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; }
     var r = rec; rec = null;
     var done = false;
-    function finish() { if (done) return; done = true; if (interim) { appendText(interim); interim = ''; } if (cb) cb(); }
+    function finish() { if (done) return; done = true; if (interim) { commitFinal(interim); interim = ''; } if (cb) cb(); }
     if (!r || r.ended) { finish(); return; }
     r.addEventListener('end', finish);
     try { r.stop(); } catch (e) { finish(); }
     setTimeout(finish, 1000);
   }
+
+  // Si el celular saca la app a segundo plano (llamada, pantalla bloqueada), al volver retomamos la voz.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible') return;
+    if (game.draft && game.draft.phase === 'recording' && !voicePaused && !rec && !voiceProblem()) {
+      restartLog = []; startListening();
+      toast('Volviste: la voz sigue escuchando');
+    }
+    if (game.draft && game.draft.phase === 'recording') keepAwake();
+  });
+
+  // Muestra en grande lo que el celular está oyendo ahora mismo.
+  var heardTimer = null;
+  function showHeard(text, final) {
+    var h = $('heard-now');
+    if (!h) return;
+    h.textContent = '«' + text + '»';
+    h.className = 'heard-now' + (final ? ' final' : '');
+    clearTimeout(heardTimer);
+    heardTimer = setTimeout(function () { var x = $('heard-now'); if (x) x.className = 'heard-now fade'; }, final ? 2500 : 4000);
+  }
+
+  // ---------- Registro de errores (para diagnosticar caídas en la cancha) ----------
+  var KEY_ERRORS = 'ultivoz.errors';
+  var errorToastShown = false;
+  function logError(msg) {
+    try {
+      var list = load(KEY_ERRORS, []);
+      list.push({ t: new Date().toISOString(), msg: String(msg).slice(0, 300), phase: game && game.draft ? game.draft.phase : 'none', ua: navigator.userAgent.slice(0, 120) });
+      save(KEY_ERRORS, list.slice(-40));
+    } catch (e) { /* sin almacenamiento */ }
+  }
+  window.addEventListener('error', function (e) {
+    logError((e.message || 'error') + ' @' + String(e.filename || '').split('/').pop() + ':' + (e.lineno || ''));
+    if (!errorToastShown) { errorToastShown = true; try { toast('Algo falló, pero lo narrado está guardado'); } catch (x) { /* nada */ } }
+  });
+  window.addEventListener('unhandledrejection', function (e) { logError('promesa: ' + (e.reason && e.reason.message || e.reason)); });
 
   // ---------- Flujo del punto ----------
   var lastGameState = null, reviewAnimate = false, lastLiveCount = 0, timerId = null, lastAdded = null;
@@ -374,6 +500,7 @@
     buzz(50);
     lastLiveCount = 0;
     autoEndBlocked = false;
+    lastFinalNorm = ''; restartLog = [];
     startListening();
     render();
   }
@@ -407,6 +534,7 @@
     } else game.points.push(point);
     game.draft = null;
     saveGame();
+    if (game.finished) archiveCurrent();
     buzz(80);
     var s = Core.computeStats(game.points, roster).score;
     toast(wasEdit ? 'Punto actualizado' : (oc === 'us' ? 'Punto nuestro · ' : oc === 'them' ? 'Punto de ellos · ' : 'Punto guardado · ') + s.us + '–' + s.them);
@@ -639,7 +767,7 @@
 
   // --- Fin / reinicio del partido ---
   function finishGame() {
-    game.finished = true; game.draft = null; saveGame(); buzz([40, 60, 80]); render();
+    game.finished = true; game.finishedAt = Date.now(); game.draft = null; saveGame(); archiveCurrent(); buzz([40, 60, 80]); render();
     toast('Partido terminado', function () { game.finished = false; saveGame(); render(); });
   }
   function restartGame() {
@@ -649,6 +777,7 @@
     toast('Partido reiniciado', function () { game = backup; saveGame(); shownScore = null; render(); });
   }
   function newMatch() {
+    archiveCurrent(); // el partido queda guardado en el historial
     var backup = clone(game);
     game = Object.assign(newGame(), { line: backup.line, startType: backup.startType, firstRatio: backup.firstRatio });
     saveGame(); shownScore = null; show('game');
@@ -681,7 +810,8 @@
         el('div', { style: 'font-size:20px;font-weight:800', text: playerName(c.from) + ' → ' + playerName(c.to) + ' · ' + c.count })]));
     }
     v.appendChild(el('div', { class: 'stack' }, [
-      el('button', { class: 'btn accent big block', type: 'button', text: 'Compartir resultados', onclick: shareResults }),
+      el('button', { class: 'btn accent big block', type: 'button', icon: 'share', onclick: shareResults }, [' Compartir stats (CSV)']),
+      el('button', { class: 'btn block', type: 'button', icon: 'share', onclick: function () { shareGameFile(currentStatsView()); } }, [' Enviar partido a otro celular']),
       el('div', { class: 'row' }, [
         el('button', { class: 'btn', style: 'flex:1', type: 'button', text: 'Ver stats', onclick: function () { show('stats'); } }),
         el('button', { class: 'btn', style: 'flex:1', type: 'button', text: 'Nuevo partido', onclick: newMatch })
@@ -692,17 +822,8 @@
 
   // Comparte el CSV (WhatsApp, correo…) si el celular lo permite; si no, lo descarga.
   function shareResults() {
-    var file = buildCsv();
-    try {
-      var f = new File([file.blob], file.name, { type: 'text/csv' });
-      if (navigator.canShare && navigator.canShare({ files: [f] })) {
-        navigator.share({ files: [f], title: 'Demo', text: 'Stats ' + (game.rival ? 'vs ' + game.rival : 'del partido') }).catch(function () {});
-        return;
-      }
-    } catch (e) { /* sin Web Share */ }
-    exportCsv();
+    exportCsv(currentStatsView());
   }
-
   // --- Grabando ---
   function renderRecording(v) {
     var d = game.draft;
@@ -712,7 +833,11 @@
       el('h2', { class: 'title', style: 'margin:0', text: 'Punto ' + pointNumber() }),
       el('span', { class: 'spacer' }), timer, typeBadge(pointType())
     ]));
-    v.appendChild(el('div', { class: 'row', style: 'justify-content:center' }, [el('span', { id: 'poss', class: 'poss' })]));
+    v.appendChild(el('div', { class: 'voice-row' }, [
+      el('span', { id: 'voice-pill', class: 'voice-pill' }),
+      el('span', { id: 'poss', class: 'poss' }),
+      el('button', { id: 'pause-btn', class: 'btn small ghost', type: 'button', onclick: toggleVoice })
+    ]));
     function tick() {
       var s = Math.floor((Date.now() - (d.startedAt || Date.now())) / 1000);
       var t = $('timer'); if (t) t.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
@@ -723,18 +848,19 @@
     v.appendChild(el('div', { class: 'rec-wrap' }, [
       el('button', { id: 'rec-btn', class: 'rec-btn recording', type: 'button', icon: 'stop', onclick: endPoint }, ['Terminar'])
     ]));
-    v.appendChild(el('div', { id: 'rec-status', class: 'rec-status', text: rec ? 'Escuchando…' : (voiceProblem() ? 'Usa los botones de abajo' : '') }));
+    v.appendChild(el('div', { id: 'heard-now', class: 'heard-now fade', 'aria-live': 'polite',
+      text: d.transcript ? '' : (voiceProblem() ? '' : 'Di nombres cortos y en orden: «Pipe, Mono, Sara, gol»') }));
+    v.appendChild(el('div', { id: 'rec-status', class: 'rec-status', text: voiceProblem() ? 'Usa los botones de abajo' : '' }));
 
-    var c = el('div', { class: 'card' }, [
-      el('p', { class: 'label', text: 'Eventos' }),
+    // Sin títulos ni transcripción completa: todo tiene que caber en una pantalla.
+    var c = el('div', { class: 'card live-card' }, [
       el('ol', { class: 'live-events', id: 'live-events' }),
-      el('details', { class: 'transcript-mini' }, [el('summary', { text: 'Lo que escuché' }), el('div', { id: 'live-text' })])
+      el('div', { id: 'live-text', hidden: true })
     ]);
     v.appendChild(c);
 
     var players = sorted(roster.filter(function (p) { return !ids.length || ids.indexOf(p.id) >= 0; }));
     var pad = el('div', { class: 'card' }, [
-      el('p', { class: 'label', text: 'Botones' }),
       grouped(players, function (p) {
         return el('button', { class: 'btn', type: 'button', text: p.name, onclick: function (e) { tapAnim(e.currentTarget); appendText(p.name); renderLive(); } });
       }, isMixed() ? 'pad-players two' : 'pad-players', 'cols'),
@@ -749,10 +875,14 @@
     v.appendChild(pad);
     lastLiveCount = Math.max(0, lastLiveCount);
     renderLive(true);
+    setVoiceState(voiceState);
   }
   function tapAnim(b) { b.classList.remove('tap'); void b.offsetWidth; b.classList.add('tap'); buzz(10); }
 
   function renderLive(initial) {
+    try { renderLiveInner(initial); } catch (err) { logError('renderLive: ' + err.message); }
+  }
+  function renderLiveInner(initial) {
     var d = game.draft;
     var ol = $('live-events');
     if (!d || d.phase !== 'recording' || !ol) return;
@@ -787,13 +917,14 @@
     ol.innerHTML = '';
     var shown = r.events.slice(-2); // altura fija: los botones de abajo no se mueven
     var isNew = !initial && r.events.length > lastLiveCount;
+    if (isNew) buzz(25); // confirma cada evento sin tener que mirar la pantalla
     shown.forEach(function (ev, i) {
       var li = el('li', { class: (ev.uncertain ? 'unc ' : '') + (ev.type === 'goal' ? 'goal ' : '') + (isNew && i === shown.length - 1 ? 'new' : '') }, [
         el('span', { class: 'ev-ico', icon: EV_ICON[ev.type] }), describe(ev)
       ]);
       ol.appendChild(li);
     });
-    if (!r.events.length) ol.appendChild(el('li', { class: 'hint', text: 'Ej.: "Pipe a Mono, gol"' }));
+    if (!r.events.length) ol.appendChild(el('li', { class: 'hint', text: 'Aquí aparecen los pases que entienda' }));
     lastLiveCount = r.events.length;
   }
 
@@ -828,6 +959,9 @@
       typeBadge(pointType(), function () { d.type = pointType() === 'O' ? 'D' : 'O'; saveGame(); render(); })
     ]));
 
+    if (d.interrupted) {
+      v.appendChild(el('div', { class: 'banner warn', icon: 'alert' }, [el('span', { text: 'La grabación se cortó (el celular cerró o recargó la app). Lo narrado está a salvo: revisa y toca el micrófono para seguir.' })]));
+    }
     var oc = Core.outcomeOf(d.events);
     v.appendChild(el('div', { class: 'banner ' + (oc || 'none') + (animate ? ' pop' : ''), icon: oc === 'us' ? 'check' : oc === 'them' ? 'x' : 'help' },
       [oc === 'us' ? 'Punto nuestro' : oc === 'them' ? 'Punto de ellos' : 'Falta el resultado: agrega Gol o Nos anotan']));
@@ -877,7 +1011,8 @@
 
     v.appendChild(el('div', { class: 'bottom-bar' }, [
       isEdit ? el('span') : el('button', { class: 'btn big', type: 'button', icon: 'mic', 'aria-label': 'Seguir narrando', onclick: function () {
-        d.phase = 'recording'; saveGame(); lastLiveCount = d.events.length;
+        d.phase = 'recording'; d.interrupted = false; saveGame(); lastLiveCount = d.events.length;
+        lastFinalNorm = ''; restartLog = [];
         autoEndBlocked = !!Core.outcomeOf(d.events); // si ya había resultado, no cerrar de inmediato
         startListening(); render();
       } }),
@@ -996,7 +1131,7 @@
       var al = aliases.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
       if (editingId) {
         var p = byId(editingId);
-        p.name = n; p.number = num.value.trim(); p.aliases = al; if (isMixed()) p.gender = formGender;
+        p.name = n; p.number = num.value.trim(); p.aliases = al; if (isMixed()) { p.gender = formGender; p.genderGuessed = false; }
         toast(n + ' actualizado');
       } else {
         roster.push({ id: uid(), name: n, number: num.value.trim(), aliases: al, gender: isMixed() ? formGender : null });
@@ -1030,7 +1165,9 @@
       function rosterRow(p) {
         var li = el('li', {}, [
           el('span', { class: 'jersey', text: p.number ? p.number : '·' }),
-          isMixed() ? el('span', { class: 'g-tag ' + (p.gender || ''), text: p.gender || '?' }) : null,
+          isMixed() ? el('button', { class: 'g-tag g-toggle ' + (p.gender || '') + (p.genderGuessed ? ' guessed' : ''), type: 'button',
+            title: p.genderGuessed ? 'Adivinado por el nombre: toca para cambiar' : 'Toca para cambiar H/M', 'aria-label': 'Cambiar H/M de ' + p.name, text: p.gender || '?',
+            onclick: function () { p.gender = p.gender === 'M' ? 'H' : 'M'; p.genderGuessed = false; saveRoster(); buzz(10); render(); } }) : null,
           el('span', { class: 'name' }, [p.name, p.aliases && p.aliases.length ? el('small', { text: 'también: ' + p.aliases.join(', ') }) : null]),
           SR ? el('button', { class: 'icon-btn', type: 'button', icon: 'mic', 'aria-label': 'Probar voz de ' + p.name, onclick: function () { openVoiceTest([p.id]); } }) : null,
           el('button', { class: 'icon-btn', type: 'button', icon: 'pencil', 'aria-label': 'Editar ' + p.name, onclick: function () { editingId = p.id; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); } }),
@@ -1086,6 +1223,22 @@
     local.addEventListener('change', function () { settings.local = local.checked; saveSettings(); });
     v.appendChild(el('div', { class: 'card stack' }, [el('p', { class: 'label', style: 'margin:0', text: 'Voz' }), langSel,
       el('label', { class: 'check' }, [local, 'Reconocer sin internet (experimental, Chrome reciente)'])]));
+
+    // Problemas registrados (para enviarlos y poder arreglarlos)
+    var errs = load(KEY_ERRORS, []);
+    if (errs.length) {
+      v.appendChild(el('div', { class: 'card stack' }, [
+        el('p', { class: 'label', style: 'margin:0', text: 'Problemas registrados · ' + errs.length }),
+        el('p', { class: 'muted small', style: 'margin:0', text: 'Si la app falló en un partido, envía este reporte para revisarlo.' }),
+        el('div', { class: 'row' }, [
+          el('button', { class: 'btn small', style: 'flex:1', type: 'button', icon: 'share', onclick: function () {
+            var text = 'Reporte Demo\n' + errs.map(function (x) { return x.t + ' [' + x.phase + '] ' + x.msg; }).join('\n') + '\n' + errs[errs.length - 1].ua;
+            if (navigator.share) navigator.share({ title: 'Reporte Demo', text: text }).catch(function () {}); else showText(text);
+          } }, [' Enviar reporte']),
+          el('button', { class: 'btn small ghost', type: 'button', text: 'Borrar', onclick: function () { save(KEY_ERRORS, []); render(); } })
+        ])
+      ]));
+    }
   }
   function typeBadgeMini(t) { return el('span', { class: 'badge mini ' + t, text: t === 'O' ? 'Ataque' : 'Defensa' }); }
 
@@ -1111,21 +1264,34 @@
       setTimeout(function () { ta.select(); }, 350);
     });
   }
+  // Entiende listas escritas de muchas formas: "Pipe 7 H", "1. Sara - 9 - F", "Vale (chica)", "Mono ♂"…
+  // Si no dice el género, lo adivina por el nombre (Sara, Vale, Mafe → chica) y lo marca para revisar.
   function parseRoster(text) {
     var out = [];
-    String(text || '').split(/\r?\n/).forEach(function (line) {
-      line = line.trim();
+    var lines = String(text || '').split(/\r?\n/);
+    // Si la lista usa F para chicas, entonces M significa "masculino" (y no "mujer").
+    var usesF = lines.some(function (l) { return /(^|[\s(,;|-])(f|fem|femenino)([\s),;|-]|$)/i.test(l); });
+    lines.forEach(function (line) {
+      line = line.replace(/[♀]/g, ' chica ').replace(/[♂]/g, ' chico ').trim();
+      line = line.replace(/^\s*(\d{1,3}[.)]|[-•*·])\s+/, ''); // numeración o viñetas de WhatsApp
       if (!line || /^plantilla( ultivoz| demo)?$/i.test(line)) return;
       var parts = line.split('|');
       var aliases = (parts[1] || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
       var number = '', gender = null, name = [];
-      parts[0].replace(/[,;\t]/g, ' ').split(/\s+/).filter(Boolean).forEach(function (t) {
+      parts[0].replace(/[,;\t()\[\]\/-]/g, ' ').split(/\s+/).filter(Boolean).forEach(function (t) {
         var n = Core.normalize(t);
-        if (!number && /^#?\d{1,3}$/.test(t)) number = t.replace('#', '');
-        else if (!gender && /^(h|m|chico|chica|hombre|mujer)$/.test(n)) gender = /^(m|chica|mujer)$/.test(n) ? 'M' : 'H';
-        else name.push(t);
+        if (!n) return;
+        if (!number && /^#?\d{1,3}$/.test(t)) { number = t.replace('#', ''); return; }
+        if (!gender) {
+          if (/^(chica|mujer|dama|fem|femenino|f)$/.test(n) || (n === 'm' && !usesF)) { gender = 'M'; return; }
+          if (/^(h|chico|hombre|varon|masc|masculino)$/.test(n) || (n === 'm' && usesF)) { gender = 'H'; return; }
+        }
+        name.push(t);
       });
-      if (name.length) out.push({ name: name.join(' '), number: number, gender: gender, aliases: aliases });
+      if (!name.length) return;
+      var nm = name.join(' ');
+      var guessed = !gender;
+      out.push({ name: nm, number: number, gender: gender || Core.guessGender(nm) || 'H', guessed: guessed, aliases: aliases });
     });
     return out;
   }
@@ -1143,16 +1309,17 @@
           var ex = roster.find(function (p) { return Core.normalize(p.name) === Core.normalize(x.name); });
           if (ex) {
             if (x.number) ex.number = x.number;
-            if (x.gender) ex.gender = x.gender;
+            if (!x.guessed) { ex.gender = x.gender; ex.genderGuessed = false; }
             x.aliases.forEach(function (a) { if ((ex.aliases || []).indexOf(a) < 0) ex.aliases = (ex.aliases || []).concat([a]); });
             updated++;
           } else {
-            roster.push({ id: uid(), name: x.name, number: x.number, aliases: x.aliases, gender: x.gender || (isMixed() ? 'H' : null) });
+            roster.push({ id: uid(), name: x.name, number: x.number, aliases: x.aliases, gender: isMixed() ? x.gender : null, genderGuessed: isMixed() && x.guessed });
             added++;
           }
         });
         saveRoster(); close(); render();
-        toast(added + ' agregados' + (updated ? ' · ' + updated + ' actualizados' : ''));
+        var guessed = list.filter(function (x) { return x.guessed; }).length;
+        toast(added + ' agregados' + (updated ? ' · ' + updated + ' actualizados' : '') + (isMixed() && guessed ? ' · revisa H/M (toca la letra para cambiarla)' : ''));
       } }));
       setTimeout(function () { ta.focus(); }, 350);
     });
@@ -1260,35 +1427,130 @@
     }, function () { if (tr) { try { tr.abort(); } catch (e) { /* ya terminó */ } tr = null; } });
   }
 
+  // ---------- Historial de partidos (se guardan en el celular) ----------
+  var KEY_HISTORY = 'ultivoz.history';
+  var history = load(KEY_HISTORY, []);
+  function saveHistory() { save(KEY_HISTORY, history); }
+  function decided(points) { return (points || []).filter(function (p) { return Core.outcomeOf(p.events || []); }).length; }
+
+  // Copia del partido actual con los nombres de los jugadores (para verlo aunque cambie la plantilla).
+  function snapshotGame(g) {
+    var players = {};
+    (g.points || []).forEach(function (pt) {
+      var ids = (pt.line || []).slice();
+      (pt.events || []).forEach(function (ev) { [ev.from, ev.to, ev.scorer, ev.assist, ev.player].forEach(function (id) { if (id) ids.push(id); }); });
+      ids.forEach(function (id) { var p = byId(id); if (p && !players[id]) players[id] = { name: p.name, number: p.number || '', gender: p.gender || null }; });
+    });
+    return { id: g.id, createdAt: g.createdAt, finishedAt: g.finished ? (g.finishedAt || Date.now()) : null, rival: g.rival || '',
+      startType: g.startType, firstRatio: g.firstRatio, halftime: g.halftime, points: clone(g.points), players: players };
+  }
+  function archiveCurrent() {
+    if (!game.id) { game.id = uid('g'); game.createdAt = game.createdAt || Date.now(); }
+    if (!decided(game.points)) return;
+    var snap = snapshotGame(game);
+    var i = history.findIndex(function (h) { return h.id === snap.id; });
+    if (i >= 0) history[i] = snap; else history.unshift(snap);
+    saveHistory();
+  }
+  function gameDate(h) { var d = new Date(h.finishedAt || h.createdAt || Date.now()); return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }); }
+  function gameScore(points) { var s = { us: 0, them: 0 }; (points || []).forEach(function (p) { var o = Core.outcomeOf(p.events || []); if (o) s[o]++; }); return s; }
+
+  // Una "vista" de stats: el partido actual, uno guardado o toda la temporada.
+  function currentStatsView() {
+    return { kind: 'current', title: game.rival ? 'vs ' + game.rival : 'Este partido', rival: game.rival, points: game.points, roster: roster,
+      name: playerName, halftime: game.halftime, editable: true };
+  }
+  function archivedView(h) {
+    var list = Object.keys(h.players || {}).map(function (id) { return { id: id, name: h.players[id].name }; });
+    return { kind: 'game', id: h.id, title: (h.rival ? 'vs ' + h.rival : 'Partido') + ' · ' + gameDate(h), rival: h.rival, points: h.points, roster: list,
+      name: function (id) { return id && h.players[id] ? h.players[id].name : (byId(id) ? byId(id).name : '?'); }, halftime: h.halftime, editable: false, game: h };
+  }
+  // Temporada: suma todos los partidos uniendo a los jugadores por nombre (sirve entre celulares distintos).
+  function seasonView() {
+    var games = history.slice();
+    if (decided(game.points) && !history.some(function (h) { return h.id === game.id; })) games.unshift(snapshotGame(game));
+    var names = {}, points = [];
+    games.forEach(function (h) {
+      var nameOf = function (id) {
+        if (!id) return null;
+        var p = h.players && h.players[id] ? h.players[id] : byId(id);
+        if (!p) return null;
+        var key = 'n:' + Core.normalize(p.name);
+        if (!names[key]) names[key] = p.name;
+        return key;
+      };
+      (h.points || []).forEach(function (pt) {
+        points.push({ type: pt.type, ratio: pt.ratio, line: (pt.line || []).map(nameOf).filter(Boolean), events: (pt.events || []).map(function (ev) {
+          var e = clone(ev); ['from', 'to', 'scorer', 'assist', 'player'].forEach(function (k) { if (e[k]) e[k] = nameOf(e[k]); }); return e;
+        }) });
+      });
+    });
+    var rec = { w: 0, l: 0, t: 0 };
+    games.forEach(function (h) { var sc = gameScore(h.points); if (sc.us > sc.them) rec.w++; else if (sc.us < sc.them) rec.l++; else rec.t++; });
+    return { kind: 'season', title: 'Temporada', points: points, games: games, record: rec,
+      roster: Object.keys(names).map(function (k) { return { id: k, name: names[k] }; }),
+      name: function (id) { return names[id] || '?'; }, editable: false };
+  }
+
   // ---------- Estadísticas ----------
-  var statsFilter = '';
+  var statsFilter = '', statsSource = 'current';
   // Lo más importante primero: en el celular se ve sin deslizar la tabla.
   var COLS = [['plusMinus', '+/-'], ['goals', 'Gol'], ['assists', 'Ast'], ['ds', 'D'], ['drops', 'Drop'], ['throwaways', 'TA'],
     ['completions', 'Pas'], ['catches', 'Rec'], ['points', 'Pts']];
-  function statRows(stats) {
-    var usesLine = game.points.some(function (p) { return p.line && p.line.length; });
+  function statsView() {
+    if (statsSource === 'season') return seasonView();
+    var h = history.find(function (x) { return x.id === statsSource; });
+    if (h && h.id !== game.id) return archivedView(h);
+    statsSource = 'current';
+    return currentStatsView();
+  }
+  function statRows(stats, V) {
+    var usesLine = V.points.some(function (p) { return p.line && p.line.length; });
     var cols = COLS.filter(function (c) { return usesLine || c[0] !== 'points'; });
+    var known = {}; V.roster.forEach(function (p) { known[p.id] = true; });
     var rows = Object.keys(stats.players).map(function (id) { return { id: id, s: stats.players[id] }; })
-      .filter(function (r) { return byId(r.id) || COLS.some(function (c) { return r.s[c[0]]; }); })
-      .sort(function (a, b) { return b.s.plusMinus - a.s.plusMinus || b.s.goals - a.s.goals || b.s.points - a.s.points || playerName(a.id).localeCompare(playerName(b.id)); });
+      .filter(function (r) { return (V.kind === 'current' ? known[r.id] : false) || COLS.some(function (c) { return r.s[c[0]]; }); })
+      .sort(function (a, b) { return b.s.plusMinus - a.s.plusMinus || b.s.goals - a.s.goals || b.s.points - a.s.points || V.name(a.id).localeCompare(V.name(b.id)); });
     return { cols: cols, rows: rows };
   }
 
   function renderStats() {
     var v = $('view-stats');
     v.innerHTML = '';
-    var all = Core.computeStats(game.points, roster);
-    var stats = statsFilter ? Core.computeStats(game.points, roster, statsFilter) : all;
-    v.appendChild(el('div', { class: 'card score-card' }, [
-      el('div', {}, [el('p', { class: 'label', text: 'Nosotros' }), el('div', { class: 'n', text: all.score.us })]),
-      el('div', { class: 'dash', text: '–' }),
-      el('div', {}, [el('p', { class: 'label', text: game.rival || 'Ellos' }), el('div', { class: 'n', text: all.score.them })])
-    ]));
+    var V = statsView();
+    var rosterList = V.kind === 'current' ? roster : V.roster;
+
+    // Selector: este partido / temporada / partidos guardados
+    var chips = [['current', game.rival ? 'Actual · vs ' + game.rival : 'Partido actual']];
+    if (history.length || decided(game.points)) chips.push(['season', 'Temporada']);
+    history.forEach(function (h) { if (h.id !== game.id) { var sc = gameScore(h.points); chips.push([h.id, (h.rival || 'Partido') + ' ' + sc.us + '–' + sc.them + ' · ' + gameDate(h)]); } });
+    if (chips.length > 1) {
+      v.appendChild(el('div', { class: 'presets' }, chips.map(function (c) {
+        return el('button', { class: 'preset' + (c[0] === statsSource ? ' on' : ''), type: 'button', text: c[1], onclick: function () { statsSource = c[0]; render(); } });
+      })));
+    }
+
+    var all = Core.computeStats(V.points, rosterList);
+    var stats = statsFilter ? Core.computeStats(V.points, rosterList, statsFilter) : all;
+    if (V.kind === 'season') {
+      v.appendChild(el('div', { class: 'card score-card' }, [
+        el('div', {}, [el('p', { class: 'label', text: 'Ganados' }), el('div', { class: 'n', text: V.record.w })]),
+        el('div', { class: 'dash', text: '–' }),
+        el('div', {}, [el('p', { class: 'label', text: 'Perdidos' }), el('div', { class: 'n', text: V.record.l })])
+      ]));
+      v.appendChild(el('p', { class: 'muted small center', style: 'margin-top:6px', text: V.games.length + ' partidos · puntos ' + all.score.us + ' a favor, ' + all.score.them + ' en contra' + (V.record.t ? ' · ' + V.record.t + ' empates' : '') }));
+    } else {
+      v.appendChild(el('div', { class: 'card score-card' }, [
+        el('div', {}, [el('p', { class: 'label', text: 'Nosotros' }), el('div', { class: 'n', text: all.score.us })]),
+        el('div', { class: 'dash', text: '–' }),
+        el('div', {}, [el('p', { class: 'label', text: V.rival || 'Ellos' }), el('div', { class: 'n', text: all.score.them })])
+      ]));
+    }
     function metric(cls, title, m, help) {
       var pct = m.played ? Math.round(100 * m.won / m.played) : 0;
       return el('div', { class: 'metric ' + cls }, [
         el('p', { class: 'label', text: title }),
-        el('div', { class: 'v', html: null }, [String(m.won), el('small', { text: ' / ' + m.played })]),
+        el('div', { class: 'v' }, [String(m.won), el('small', { text: ' / ' + m.played })]),
         el('div', { class: 'bar' }, [el('i', { style: 'width:' + pct + '%' })]),
         el('p', { class: 'muted small', style: 'margin:6px 0 0', text: help })
       ]);
@@ -1299,12 +1561,12 @@
     ]));
     v.appendChild(seg([['', 'Todo'], ['O', 'Ataque'], ['D', 'Defensa']], statsFilter, function (val) { statsFilter = val; render(); }));
 
-    var t = statRows(stats);
+    var t = statRows(stats, V);
     var table = el('table');
     table.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Jugador' })].concat(t.cols.map(function (c) { return el('th', { text: c[1] }); })))]));
     var body = el('tbody');
     t.rows.forEach(function (r) {
-      body.appendChild(el('tr', {}, [el('td', { text: playerName(r.id) })].concat(t.cols.map(function (c) {
+      body.appendChild(el('tr', {}, [el('td', { text: V.name(r.id) })].concat(t.cols.map(function (c) {
         var val = r.s[c[0]];
         return el('td', { class: (c[0] === 'plusMinus' ? 'pm' : '') + (val === 0 ? ' zero' : ''), text: c[0] === 'plusMinus' && val > 0 ? '+' + val : String(val) });
       }))));
@@ -1318,61 +1580,157 @@
     var max = conns.length ? conns[0].count : 1;
     v.appendChild(el('div', { class: 'card' }, [el('p', { class: 'label', text: 'Conexiones' }),
       conns.length ? el('ul', { class: 'conn' }, conns.map(function (c) {
-        return el('li', {}, [el('span', { text: playerName(c.from) + ' → ' + playerName(c.to) }),
+        return el('li', {}, [el('span', { text: V.name(c.from) + ' → ' + V.name(c.to) }),
           el('span', { class: 'cbar' }, [el('i', { style: 'width:' + Math.round(100 * c.count / max) + '%' })]), el('span', { class: 'cn', text: c.count })]);
       })) : el('p', { class: 'muted small', style: 'margin:0', text: 'Aparecen cuando haya pases.' })]));
 
-    var pl = el('ul', { class: 'points' });
-    var us = 0, them = 0;
-    game.points.forEach(function (p, i) {
-      if (game.halftime === i && i) pl.appendChild(el('li', { class: 'g-head' }, [el('p', { class: 'g-label', style: 'margin:0', text: 'Medio tiempo · ' + us + '–' + them })]));
-      var oc = Core.outcomeOf(p.events);
-      if (oc === 'us') us++; if (oc === 'them') them++;
-      var goal = p.events.filter(function (e) { return e.type === 'goal'; })[0];
-      var txt = us + '–' + them + ' · ' + (goal ? playerName(goal.scorer) + (goal.assist ? ' de ' + playerName(goal.assist) : '') : oc === 'them' ? 'de ellos' : 'sin resultado');
-      pl.appendChild(el('li', {}, [
-        el('span', { class: 'res ' + (oc || ''), icon: oc === 'us' ? 'check' : oc === 'them' ? 'x' : 'help' }),
-        p.type ? typeBadgeMini(p.type) : null,
-        p.ratio ? el('span', { class: 'g-tag ' + (p.ratio === '4M' ? 'M' : 'H'), title: ratioLabel(p.ratio), text: p.ratio === '4M' ? 'M' : 'H' }) : null,
-        el('span', { class: 'txt', text: txt }),
-        el('button', { class: 'icon-btn', type: 'button', icon: 'pencil', 'aria-label': 'Editar punto ' + (i + 1), onclick: function () {
-          if (game.draft && game.draft.phase === 'recording') { toast('Termina el punto en curso primero'); return; }
-          game.draft = { phase: 'review', transcript: p.transcript || '', events: clone(p.events), unknown: [], editIndex: i, type: p.type };
-          reviewAnimate = true;
-          saveGame(); show('game');
-        } })
-      ]));
-    });
-    v.appendChild(el('div', { class: 'card' }, [el('p', { class: 'label', text: 'Puntos' }),
-      game.points.length ? pl : el('p', { class: 'muted small', style: 'margin:0', text: 'Aún no hay puntos confirmados.' })]));
+    if (V.kind !== 'season') {
+      var pl = el('ul', { class: 'points' });
+      var us = 0, them = 0;
+      V.points.forEach(function (p, i) {
+        if (V.halftime === i && i) pl.appendChild(el('li', { class: 'g-head' }, [el('p', { class: 'g-label', style: 'margin:0', text: 'Medio tiempo · ' + us + '–' + them })]));
+        var oc = Core.outcomeOf(p.events);
+        if (oc === 'us') us++; if (oc === 'them') them++;
+        var goal = p.events.filter(function (e) { return e.type === 'goal'; })[0];
+        var txt = us + '–' + them + ' · ' + (goal ? V.name(goal.scorer) + (goal.assist ? ' de ' + V.name(goal.assist) : '') : oc === 'them' ? 'de ellos' : 'sin resultado');
+        pl.appendChild(el('li', {}, [
+          el('span', { class: 'res ' + (oc || ''), icon: oc === 'us' ? 'check' : oc === 'them' ? 'x' : 'help' }),
+          p.type ? typeBadgeMini(p.type) : null,
+          p.ratio ? el('span', { class: 'g-tag ' + (p.ratio === '4M' ? 'M' : 'H'), title: ratioLabel(p.ratio), text: p.ratio === '4M' ? 'M' : 'H' }) : null,
+          el('span', { class: 'txt', text: txt }),
+          V.editable ? el('button', { class: 'icon-btn', type: 'button', icon: 'pencil', 'aria-label': 'Editar punto ' + (i + 1), onclick: function () {
+            if (game.draft && game.draft.phase === 'recording') { toast('Termina el punto en curso primero'); return; }
+            game.draft = { phase: 'review', transcript: p.transcript || '', events: clone(p.events), unknown: [], editIndex: i, type: p.type };
+            reviewAnimate = true;
+            saveGame(); show('game');
+          } }) : null
+        ]));
+      });
+      v.appendChild(el('div', { class: 'card' }, [el('p', { class: 'label', text: 'Puntos' }),
+        V.points.length ? pl : el('p', { class: 'muted small', style: 'margin:0', text: 'Aún no hay puntos confirmados.' })]));
+    }
 
-    v.appendChild(el('div', { class: 'row' }, [
-      el('button', { class: 'btn', style: 'flex:1', type: 'button', text: 'Exportar CSV', onclick: exportCsv }),
-      game.finished || !game.points.length
-        ? el('button', { class: 'btn danger-text', style: 'flex:1', type: 'button', text: 'Nuevo partido', onclick: newMatch })
-        : el('button', { class: 'btn', style: 'flex:1', type: 'button', text: 'Terminar partido', onclick: function () { show('game'); finishGame(); } })
+    // Acciones según lo que se está viendo
+    var actions = el('div', { class: 'stack' });
+    actions.appendChild(el('div', { class: 'row' }, [
+      el('button', { class: 'btn', style: 'flex:1', type: 'button', icon: 'download', onclick: function () { exportCsv(V); } }, [' Exportar CSV']),
+      V.kind === 'season' ? null : el('button', { class: 'btn', style: 'flex:1', type: 'button', icon: 'share', onclick: function () { shareGameFile(V); } }, [' Enviar partido'])
+    ]));
+    if (V.kind === 'current') {
+      actions.appendChild(game.finished || !game.points.length
+        ? el('button', { class: 'btn block danger-text', type: 'button', text: 'Nuevo partido', onclick: newMatch })
+        : el('button', { class: 'btn block', type: 'button', text: 'Terminar partido', onclick: function () { show('game'); finishGame(); } }));
+    }
+    if (V.kind === 'game') {
+      actions.appendChild(el('button', { class: 'btn block danger-text', type: 'button', text: 'Borrar este partido', onclick: function () {
+        var i = history.indexOf(V.game); if (i < 0) return;
+        history.splice(i, 1); saveHistory(); statsSource = 'current'; render();
+        toast('Partido borrado', function () { history.splice(i, 0, V.game); saveHistory(); statsSource = V.game.id; render(); });
+      } }));
+    }
+    v.appendChild(actions);
+
+    // Pasar partidos entre celulares y respaldo
+    var file = el('input', { type: 'file', accept: '.json,application/json', style: 'display:none' });
+    file.addEventListener('change', function () { if (file.files[0]) importFile(file.files[0]); });
+    v.appendChild(el('div', { class: 'card stack' }, [
+      el('p', { class: 'label', style: 'margin:0', text: 'Partidos guardados en este celular · ' + history.length }),
+      el('p', { class: 'muted small', style: 'margin:0', text: '"Enviar partido" manda un archivo para juntar las stats en otro celular (por ejemplo, el del capitán), que lo carga con "Importar".' }),
+      el('div', { class: 'row' }, [
+        el('button', { class: 'btn small', style: 'flex:1', type: 'button', icon: 'upload', onclick: function () { file.click(); } }, [' Importar']),
+        el('button', { class: 'btn small', style: 'flex:1', type: 'button', icon: 'download', onclick: backupAll }, [' Respaldo completo'])
+      ]),
+      file
     ]));
   }
 
-  function exportCsv() {
-    var file = buildCsv();
-    var a = el('a', { href: URL.createObjectURL(file.blob), download: file.name });
+  function fileSlug(V) {
+    var base = V.kind === 'season' ? 'temporada' : (V.rival ? Core.normalize(V.rival).replace(/ /g, '-') : 'partido');
+    return 'demo-' + base + '-' + new Date().toISOString().slice(0, 10);
+  }
+  function download(blob, name) {
+    var a = el('a', { href: URL.createObjectURL(blob), download: name });
     document.body.appendChild(a); a.click(); a.remove();
   }
-  function buildCsv() {
-    var stats = Core.computeStats(game.points, roster);
-    var t = statRows(stats);
+  // En el celular abre el menú de compartir (WhatsApp, correo…); si no se puede, descarga el archivo.
+  function shareOrDownload(blob, name, type, title) {
+    try {
+      var f = new File([blob], name, { type: type });
+      if (navigator.canShare && navigator.canShare({ files: [f] })) {
+        navigator.share({ files: [f], title: title }).catch(function () {});
+        return;
+      }
+    } catch (e) { /* sin Web Share */ }
+    download(blob, name);
+  }
+  function exportCsv(V) {
+    var file = buildCsv(V || currentStatsView());
+    shareOrDownload(file.blob, file.name, 'text/csv', 'Stats Demo');
+  }
+  function buildCsv(V) {
+    var rosterList = V.kind === 'current' ? roster : V.roster;
+    var stats = Core.computeStats(V.points, rosterList);
+    var t = statRows(stats, V);
     var q = function (s) { return '"' + String(s).replace(/"/g, '""') + '"'; };
-    var out = [['Jugador'].concat(t.cols.map(function (c) { return c[1]; })).join(',')];
-    t.rows.forEach(function (r) { out.push([q(playerName(r.id))].concat(t.cols.map(function (c) { return r.s[c[0]]; })).join(',')); });
+    var out = [q(V.title)];
+    out.push(['Jugador'].concat(t.cols.map(function (c) { return c[1]; })).join(','));
+    t.rows.forEach(function (r) { out.push([q(V.name(r.id))].concat(t.cols.map(function (c) { return r.s[c[0]]; })).join(',')); });
     out.push('', 'Lanzador,Receptor,Pases');
-    stats.connections.forEach(function (c) { out.push(q(playerName(c.from)) + ',' + q(playerName(c.to)) + ',' + c.count); });
+    stats.connections.forEach(function (c) { out.push(q(V.name(c.from)) + ',' + q(V.name(c.to)) + ',' + c.count); });
     out.push('', 'Marcador,' + stats.score.us + ',' + stats.score.them);
     out.push('Holds,' + stats.holds.won + ',' + stats.holds.played, 'Breaks,' + stats.breaks.won + ',' + stats.breaks.played);
-    return {
-      blob: new Blob(['\ufeff' + out.join('\n')], { type: 'text/csv;charset=utf-8' }),
-      name: 'demo-' + (game.rival ? Core.normalize(game.rival).replace(/ /g, '-') + '-' : '') + new Date().toISOString().slice(0, 10) + '.csv'
+    if (V.kind !== 'season') {
+      // Detalle punto por punto (para analizar después en Excel o Google Sheets)
+      out.push('', 'Punto,Tipo,Proporcion,Resultado,Eventos');
+      var us = 0, them = 0;
+      V.points.forEach(function (p, i) {
+        var oc = Core.outcomeOf(p.events || []); if (oc === 'us') us++; if (oc === 'them') them++;
+        var evs = (p.events || []).map(function (ev) { return describe(ev, V.name); }).join(' | ');
+        out.push([i + 1, p.type === 'O' ? 'Ataque' : p.type === 'D' ? 'Defensa' : '', p.ratio ? ratioLabel(p.ratio) : '',
+          oc ? us + '-' + them : 'sin resultado', q(evs)].join(','));
+      });
+    }
+    return { blob: new Blob(['﻿' + out.join('\n')], { type: 'text/csv;charset=utf-8' }), name: fileSlug(V) + '.csv' };
+  }
+  function shareGameFile(V) {
+    var snap = V.kind === 'current' ? snapshotGame(game) : V.game;
+    if (V.kind === 'current' && !snap.id) { archiveCurrent(); snap = snapshotGame(game); }
+    var blob = new Blob([JSON.stringify({ app: 'demo-ultimate', version: 1, game: snap })], { type: 'application/json' });
+    shareOrDownload(blob, fileSlug(V) + '.json', 'application/json', 'Partido Demo');
+  }
+  function backupAll() {
+    archiveCurrent();
+    var blob = new Blob([JSON.stringify({ app: 'demo-ultimate', version: 1, roster: roster, lines: lines, settings: settings, history: history })], { type: 'application/json' });
+    shareOrDownload(blob, 'demo-respaldo-' + new Date().toISOString().slice(0, 10) + '.json', 'application/json', 'Respaldo Demo');
+  }
+  function importFile(f) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(reader.result);
+        var games = data.game ? [data.game] : (data.history || []);
+        var added = 0;
+        games.forEach(function (g) {
+          if (!g || !g.points) return;
+          var i = history.findIndex(function (h) { return h.id === g.id; });
+          if (i >= 0) history[i] = g; else { history.push(g); added++; }
+        });
+        history.sort(function (a, b) { return (b.finishedAt || b.createdAt || 0) - (a.finishedAt || a.createdAt || 0); });
+        saveHistory();
+        // Del respaldo completo, agregamos jugadores y líneas que falten (por nombre).
+        var newPlayers = 0;
+        (data.roster || []).forEach(function (p) {
+          if (!roster.some(function (x) { return Core.normalize(x.name) === Core.normalize(p.name); })) { roster.push(p); newPlayers++; }
+        });
+        (data.lines || []).forEach(function (l) { if (!lines.some(function (x) { return x.id === l.id; })) lines.push(l); });
+        if (newPlayers) saveRoster();
+        if (data.lines) saveLines();
+        if (games.length === 1 && games[0].id) statsSource = games[0].id;
+        render();
+        toast(games.length ? (added ? added + ' partido(s) importado(s)' : 'Partido actualizado') + (newPlayers ? ' · ' + newPlayers + ' jugadores' : '') : 'El archivo no tiene partidos');
+      } catch (e) { logError('importar: ' + e.message); toast('No pude leer ese archivo'); }
     };
+    reader.readAsText(f);
   }
 
   // ---------- Inicio ----------
@@ -1380,6 +1738,8 @@
   if (game.draft && game.draft.phase === 'recording') {
     var rr = interp(game.draft.transcript);
     game.draft.events = rr.events; game.draft.unknown = rr.unknown; game.draft.phase = 'review';
+    game.draft.interrupted = true; // la app se cerró o recargó a mitad del punto
+    logError('punto interrumpido (la app se cerró o recargó grabando)');
     saveGame(); reviewAnimate = true;
   }
   show(roster.length ? 'game' : 'roster');

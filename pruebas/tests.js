@@ -135,6 +135,17 @@
     var opp2 = core.interpret('throwaway de Tigres, Pipe a Mono, punto de Tigres', ROSTER, null, { rival: 'Tigres' });
     chk('nombre del rival = ellos', [opp2.events.map(fmt).join(' | '), opp2.outcome], ['PIERDEN | Pipe>Mono | ELLOS', 'them']);
 
+    // Más tolerancia con los 7 en cancha
+    lineCase('línea: "pipo" y "juan" se leen como Pipe y Juancho', 'pipo, mono, juan', ['Pipe>Mono', 'Mono>Juancho']);
+    lineCase('charla de banca no crea pases', 'corre Pipe, mira, toma, Mono', ['Pipe>Mono']);
+    chk('"marca" no es gol', core.interpret('Pipe a Mono, marca', ROSTER).outcome, null);
+
+    // Género por nombre al pegar listas
+    chk('género por nombre', ['Sara', 'Vale', 'Mafe', 'Laura', 'Pipe', 'Juancho', 'Luca'].map(core.guessGender), ['M', 'M', 'M', 'M', null, null, 'H']);
+
+    // Elegir la mejor alternativa del reconocimiento
+    chk('la alternativa con nombres gana', core.scoreText('pipe a mono', ROSTER) > core.scoreText('pide a modo', ROSTER), true);
+
     // Palabras no reconocidas se reportan para poder asignarlas como alias.
     var u = core.interpret('Pipe a Ramiro', ROSTER);
     results.push({ name: 'reporta palabra desconocida "ramiro"', ok: u.unknown.indexOf('ramiro') >= 0, expected: 'ramiro', got: u.unknown.join(',') });
