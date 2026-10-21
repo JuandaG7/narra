@@ -146,6 +146,14 @@
     // Elegir la mejor alternativa del reconocimiento
     chk('la alternativa con nombres gana', core.scoreText('pipe a mono', ROSTER) > core.scoreText('pide a modo', ROSTER), true);
 
+    // En defensa, "throwaway" o "drop" a secas es error del rival
+    var dfn = core.interpret('throwaway, Sara a Leo, Leo a Pipe, drop, defensa de Mono, Mono a Juancho, gol', ROSTER, null, { start: 'them' });
+    chk('en defensa: throwaway = error de ellos; después drop = nuestro; defensa = D',
+      [dfn.events.map(fmt).join(' | '), dfn.events[0].kind], ['PIERDEN | Sara>Leo | DROP Pipe (de Leo) | D Mono | Mono>Juancho | GOL Juancho (ast Mono)', 'throwaway']);
+    var atk = core.interpret('Pipe a Mono, throwaway, drop', ROSTER, null, { start: 'us' });
+    chk('en ataque: throwaway nuestro, y luego el drop es de ellos', atk.events.map(fmt).join(' | '), 'Pipe>Mono | TA Mono | PIERDEN');
+    chk('en defensa con nombre explícito sigue siendo nuestro', core.interpret('throwaway de Pipe', ROSTER, null, { start: 'them' }).events.map(fmt).join(' | '), 'TA Pipe');
+
     // Palabras no reconocidas se reportan para poder asignarlas como alias.
     var u = core.interpret('Pipe a Ramiro', ROSTER);
     results.push({ name: 'reporta palabra desconocida "ramiro"', ok: u.unknown.indexOf('ramiro') >= 0, expected: 'ramiro', got: u.unknown.join(',') });

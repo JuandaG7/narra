@@ -255,6 +255,15 @@
       state.events.push(ev);
     }
     function last() { return state.events[state.events.length - 1]; }
+    // Quién tiene el disco en este momento de la narración.
+    function possNow() {
+      var p = (opts && opts.start) || null;
+      state.events.forEach(function (ev) {
+        if (ev.type === 'pass' || ev.type === 'd' || ev.type === 'opp') p = 'us';
+        if (ev.type === 'drop' || ev.type === 'throwaway') p = 'them';
+      });
+      return state.holder ? 'us' : p;
+    }
 
     for (var i = 0; i < items.length; i++) {
       var it = items[i];
@@ -283,6 +292,12 @@
 
       snapshot();
       var lp, explicit;
+      // Si estamos defendiendo, "drop" / "throwaway" / "la pierde" es error de ELLOS (no hace falta decir "de ellos").
+      if ((it.kind === 'drop' || it.kind === 'ta') && possNow() === 'them' && !(nextPlayer && nextPlayer.afterDe)) {
+        push({ type: 'opp', kind: it.kind === 'drop' ? 'drop' : 'throwaway' });
+        state.holder = null;
+        continue;
+      }
       switch (it.kind) {
         case 'drop':
           explicit = nextPlayer && nextPlayer.afterDe ? nextPlayer : null;

@@ -115,7 +115,8 @@
   function rivalName() { return game.rival || 'ellos'; }
   function rivalShort() { return game.rival && game.rival.length <= 9 ? game.rival : 'ellos'; }
   function interp(text, withStart) {
-    return Core.interpret(text, roster, lineIds(), { rival: game.rival, start: withStart ? (pointType() === 'O' ? 'us' : 'them') : null });
+    // Siempre sabemos quién empieza con el disco: así "throwaway" en defensa se entiende como error de ellos.
+    return Core.interpret(text, roster, lineIds(), { rival: game.rival, start: pointType() === 'O' ? 'us' : 'them' });
   }
 
   function describe(ev, nameFn) {
@@ -127,7 +128,7 @@
       case 'throwaway': return 'Throwaway de ' + n(ev.from);
       case 'd': return 'D de ' + n(ev.player);
       case 'them': return 'Punto de ellos';
-      case 'opp': return (ev.kind === 'drop' ? 'Drop de ' : 'Error de ') + rivalName();
+      case 'opp': return (ev.kind === 'drop' ? 'Drop de ' : ev.kind === 'throwaway' ? 'Throwaway de ' : 'Error de ') + rivalName();
     }
     return ev.type;
   }
@@ -1024,7 +1025,7 @@
     var d = game.draft;
     var li = el('li', { class: 'ev' + (ev.uncertain ? ' unc' : '') + (ev.type === 'goal' ? ' goal' : '') + (animate ? ' stagger' + (ev.uncertain ? ' flash' : '') : ''), style: '--i:' + idx });
     li.appendChild(el('button', { class: 'pick type', type: 'button', icon: EV_ICON[ev.type], 'aria-label': 'Cambiar tipo', onclick: function () { openTypeSheet(ev, idx); } },
-      [FIELDS[ev.type].length ? EV_LABEL[ev.type] : EV_LABEL[ev.type]]));
+      [ev.type === 'opp' ? (ev.kind === 'drop' ? 'Drop ' : ev.kind === 'throwaway' ? 'Throwaway ' : 'Error ') + rivalShort() : EV_LABEL[ev.type]]));
     FIELDS[ev.type].forEach(function (f) {
       if (f[1]) li.appendChild(el('span', { class: 'word', text: f[1] }));
       var id = ev[f[0]];
