@@ -64,6 +64,13 @@ Todo funciona en el teléfono: plantilla, interpretación y estadísticas se gua
 - **Partidos guardados:** cada partido terminado queda en el celular. En Stats puedes ver el actual, cada partido
   guardado o la **Temporada** (todo sumado). Exporta CSV (con detalle punto por punto), **Enviar partido** a otro
   celular (archivo) e **Importar** para juntar todo en el del capitán, más un **Respaldo completo**.
+- **Cómo va el partido:** se elige a cuánto se juega (11, 13, 15 o sin límite). El medio tiempo se marca solo al
+  llegar a la mitad y, al llegar al puntaje, pregunta si se acabó (por si hay cap o diferencia de 2).
+- **Correcciones por voz:** "Pipe a Mono, no, a Sara" o "gol, corrijo Juancho" cambian el último nombre.
+- **Líneas y breaks:** cada punto guarda la línea que jugó (con su nombre si era una línea guardada). Stats muestra
+  breaks y holds por línea, y la columna Brk dice en cuántos breaks estuvo cada jugador.
+- **Resumen para el grupo:** "Mandar resumen al grupo" arma un mensaje con marcador, breaks, goles, asistencias,
+  D, mejor +/- y conexión del partido, listo para WhatsApp.
 
 ## Correr en el computador
 

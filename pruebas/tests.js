@@ -154,6 +154,19 @@
     chk('en ataque: throwaway nuestro, y luego el drop es de ellos', atk.events.map(fmt).join(' | '), 'Pipe>Mono | TA Mono | PIERDEN');
     chk('en defensa con nombre explícito sigue siendo nuestro', core.interpret('throwaway de Pipe', ROSTER, null, { start: 'them' }).events.map(fmt).join(' | '), 'TA Pipe');
 
+    // Correcciones por voz
+    chk('"no, a Sara" corrige el receptor', core.interpret('Pipe a Mono, no, a Sara, Sara a Leo', ROSTER).events.map(fmt).join(' | '), 'Pipe>Sara | Sara>Leo');
+    chk('"corrijo Juancho" corrige al anotador', core.interpret('Pipe a Mono, gol, corrijo Juancho', ROSTER).events.map(fmt).join(' | '), 'Pipe>Juancho | GOL Mono (ast Pipe)'.replace('GOL Mono (ast Pipe)', 'GOL Juancho (ast Pipe)'));
+    chk('"corrijo" sin nombre deshace', core.interpret('Pipe a Mono, Mono a Sara, corrijo', ROSTER).events.map(fmt).join(' | '), 'Pipe>Mono');
+
+    // Breaks por jugador (estar en cancha cuando ganamos un punto de defensa)
+    var brk = core.computeStats([
+      { type: 'D', line: ['p1', 'p2'], events: core.interpret('D de Pipe, Pipe a Mono, gol', ROSTER).events },
+      { type: 'D', line: ['p1', 'p3'], events: core.interpret('nos anotan', ROSTER).events },
+      { type: 'O', line: ['p1'], events: core.interpret('Pipe a Mono, gol', ROSTER).events }
+    ], ROSTER);
+    chk('breaks jugados: Pipe 1, Mono 1, Juancho 0', [brk.players.p1.breaks, brk.players.p2.breaks, brk.players.p3.breaks], [1, 1, 0]);
+
     // Palabras no reconocidas se reportan para poder asignarlas como alias.
     var u = core.interpret('Pipe a Ramiro', ROSTER);
     results.push({ name: 'reporta palabra desconocida "ramiro"', ok: u.unknown.indexOf('ramiro') >= 0, expected: 'ramiro', got: u.unknown.join(',') });

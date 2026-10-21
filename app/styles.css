@@ -454,3 +454,8 @@ body.focus .view > * + * { margin-top: 8px; }
 .live-card { padding: 10px; }
 body.focus .heard-now { margin-top: 2px; font-size: 17px; }
 body.focus .point-head .title { font-size: 22px; }
+
+/* Tabla por línea */
+.line-table td:first-child { white-space: normal; min-width: 120px; }
+.line-table td, .line-table th { text-align: right; }
+.line-table td:first-child, .line-table th:first-child { text-align: left; }

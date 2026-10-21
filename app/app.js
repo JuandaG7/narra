@@ -68,7 +68,7 @@
   var lines = load(KEYS.lines, []);
   var settings = Object.assign({ lang: 'es-CO', local: false, division: 'mixto', mixedRule: 'abba' }, load(KEYS.settings, {}));
   function newGame() {
-    return { id: uid('g'), createdAt: Date.now(), started: false, rival: '', startType: 'O', firstRatio: '4M', points: [], line: [], draft: null, typeOverride: null, halftime: null };
+    return { id: uid('g'), createdAt: Date.now(), started: false, rival: '', startType: 'O', firstRatio: '4M', target: 15, points: [], line: [], draft: null, typeOverride: null, halftime: null };
   }
   var game = Object.assign(newGame(), load(KEYS.game, {}) || {});
   if (game.points.length && !game.started) game.started = true; // datos de la versión anterior
@@ -527,10 +527,10 @@
     var oc = Core.outcomeOf(d.events);
     if (!oc && force !== true) { askOutcome(); return; }
     var wasEdit = d.editIndex != null;
-    var point = { type: pointType(), ratio: pointRatio(), line: lineIds(), events: d.events, transcript: d.transcript, ts: Date.now() };
+    var point = { type: pointType(), ratio: pointRatio(), line: lineIds(), lineName: lineLabel(lineIds()), events: d.events, transcript: d.transcript, ts: Date.now() };
     if (wasEdit) {
       var old = game.points[d.editIndex];
-      point.line = old.line || []; point.ts = old.ts; point.type = d.type || old.type;
+      point.line = old.line || []; point.lineName = old.lineName || ''; point.ts = old.ts; point.type = d.type || old.type;
       game.points[d.editIndex] = point;
     } else game.points.push(point);
     game.draft = null;
@@ -538,8 +538,48 @@
     if (game.finished) archiveCurrent();
     buzz(80);
     var s = Core.computeStats(game.points, roster).score;
-    toast(wasEdit ? 'Punto actualizado' : (oc === 'us' ? 'Punto nuestro · ' : oc === 'them' ? 'Punto de ellos · ' : 'Punto guardado · ') + s.us + '–' + s.them);
-    if (wasEdit) show('stats'); else render();
+    var msg = wasEdit ? 'Punto actualizado' : (oc === 'us' ? 'Punto nuestro · ' : oc === 'them' ? 'Punto de ellos · ' : 'Punto guardado · ') + s.us + '–' + s.them;
+    if (wasEdit) { toast(msg); show('stats'); return; }
+    gameFlowAfterPoint(s, msg);
+    render();
+  }
+
+  // La app sabe cómo va el partido: medio tiempo al llegar a la mitad y pregunta al llegar al puntaje.
+  function gameFlowAfterPoint(s, msg) {
+    var top = Math.max(s.us, s.them), t = game.target || 0;
+    var undoHalf = null;
+    if (t && game.halftime == null && top >= Math.ceil(t / 2)) {
+      game.halftime = game.points.length; game.typeOverride = null; saveGame();
+      msg += ' · Medio tiempo: arrancan en ' + (pointType() === 'O' ? 'ataque' : 'defensa');
+      undoHalf = function () { game.halftime = null; saveGame(); render(); };
+      buzz([60, 60, 60]);
+    }
+    toast(msg, undoHalf);
+    if (t && top >= t && !game.endAsked) {
+      game.endAsked = true; saveGame();
+      setTimeout(function () {
+        openSheet(function (sh, close) {
+          sh.appendChild(el('h3', { text: '¿Se acabó el partido? ' + s.us + '–' + s.them }));
+          sh.appendChild(el('p', { class: 'muted small', style: 'margin:-6px 0 12px', text: (s.us > s.them ? 'Llegamos' : 'Llegaron') + ' a ' + t + '. Si hay cap o se juega por diferencia de 2, sigue jugando.' }));
+          sh.appendChild(el('button', { class: 'btn accent big block', type: 'button', text: 'Terminar partido', onclick: function () { close(); finishGame(); } }));
+          sh.appendChild(el('button', { class: 'btn block', style: 'margin-top:8px', type: 'button', text: 'Seguir jugando', onclick: function () { close(); } }));
+        });
+      }, 400);
+    }
+  }
+
+  // Nombre de la línea que jugó el punto: la guardada que coincide (o casi) con los 7 en cancha.
+  function lineLabel(ids) {
+    if (!ids.length) return '';
+    var best = null, bestN = 0;
+    lines.forEach(function (l) {
+      var n = l.players.filter(function (id) { return ids.indexOf(id) >= 0; }).length;
+      if (n > bestN) { best = l; bestN = n; }
+    });
+    if (!best) return '';
+    var same = bestN === ids.length && bestN === best.players.filter(byId).length;
+    if (same) return best.name;
+    return bestN >= Math.min(5, ids.length) ? best.name + ' (con cambios)' : '';
   }
   // Si se confirma sin resultado, preguntamos cómo terminó (si no, el marcador y la proporción se descuadran).
   function askOutcome() {
@@ -644,6 +684,11 @@
     var rival = el('input', { type: 'text', placeholder: 'Rival (opcional)', value: game.rival || '', autocomplete: 'off' });
     rival.addEventListener('input', function () { game.rival = rival.value.trim(); saveGame(); });
     c.appendChild(rival);
+    c.appendChild(el('p', { class: 'field-label', text: 'Se juega a' }));
+    c.appendChild(seg([['11', '11'], ['13', '13'], ['15', '15'], ['0', 'Sin límite']], String(game.target || 0), function (val) { game.target = +val; saveGame(); render(); }));
+    c.appendChild(el('p', { class: 'muted small', style: 'margin:6px 2px 0', text: game.target
+      ? 'Medio tiempo automático al llegar a ' + Math.ceil(game.target / 2) + '. Al llegar a ' + game.target + ' te pregunta si se acabó (por si hay cap o diferencia de 2).'
+      : 'Sin límite: marcas el medio tiempo y el final a mano.' }));
     c.appendChild(el('p', { class: 'field-label', text: 'Según el sorteo, empezamos…' }));
     c.appendChild(seg([['O', 'Atacando'], ['D', 'Defendiendo']], game.startType, function (val) { game.startType = val; saveGame(); render(); }));
     c.appendChild(el('p', { class: 'muted small', style: 'margin:6px 2px 0', text: game.startType === 'O' ? 'Ellos hacen el primer pull.' : 'Nosotros hacemos el primer pull.' }));
@@ -683,6 +728,7 @@
     var ids = lineIds();
     var head = el('div', { class: 'point-head' }, [
       el('h2', { class: 'title', style: 'margin:0', text: 'Punto ' + pointNumber() }),
+      game.target ? el('span', { class: 'muted small', style: 'font-weight:700', text: 'a ' + game.target }) : null,
       el('span', { class: 'spacer' }),
       typeBadge(type, function () { game.typeOverride = type === 'O' ? 'D' : 'O'; saveGame(); render(); }),
       ratio ? ratioBadge(ratio, ids, function () {
@@ -773,14 +819,14 @@
   }
   function restartGame() {
     var backup = clone(game);
-    game = Object.assign(newGame(), { rival: backup.rival, line: backup.line, startType: backup.startType, firstRatio: backup.firstRatio });
+    game = Object.assign(newGame(), { rival: backup.rival, line: backup.line, startType: backup.startType, firstRatio: backup.firstRatio, target: backup.target });
     saveGame(); shownScore = null; show('game');
     toast('Partido reiniciado', function () { game = backup; saveGame(); shownScore = null; render(); });
   }
   function newMatch() {
     archiveCurrent(); // el partido queda guardado en el historial
     var backup = clone(game);
-    game = Object.assign(newGame(), { line: backup.line, startType: backup.startType, firstRatio: backup.firstRatio });
+    game = Object.assign(newGame(), { line: backup.line, startType: backup.startType, firstRatio: backup.firstRatio, target: backup.target });
     saveGame(); shownScore = null; show('game');
     toast('Partido nuevo', function () { game = backup; saveGame(); shownScore = null; render(); });
   }
@@ -811,7 +857,8 @@
         el('div', { style: 'font-size:20px;font-weight:800', text: playerName(c.from) + ' → ' + playerName(c.to) + ' · ' + c.count })]));
     }
     v.appendChild(el('div', { class: 'stack' }, [
-      el('button', { class: 'btn accent big block', type: 'button', icon: 'share', onclick: shareResults }, [' Compartir stats (CSV)']),
+      el('button', { class: 'btn accent big block', type: 'button', icon: 'share', onclick: function () { shareSummary(currentStatsView()); } }, [' Mandar resumen al grupo']),
+      el('button', { class: 'btn block', type: 'button', icon: 'download', onclick: shareResults }, [' Stats completas (CSV)']),
       el('button', { class: 'btn block', type: 'button', icon: 'share', onclick: function () { shareGameFile(currentStatsView()); } }, [' Enviar partido a otro celular']),
       el('div', { class: 'row' }, [
         el('button', { class: 'btn', style: 'flex:1', type: 'button', text: 'Ver stats', onclick: function () { show('stats'); } }),
@@ -1481,7 +1528,7 @@
         return key;
       };
       (h.points || []).forEach(function (pt) {
-        points.push({ type: pt.type, ratio: pt.ratio, line: (pt.line || []).map(nameOf).filter(Boolean), events: (pt.events || []).map(function (ev) {
+        points.push({ type: pt.type, ratio: pt.ratio, lineName: pt.lineName || '', line: (pt.line || []).map(nameOf).filter(Boolean), events: (pt.events || []).map(function (ev) {
           var e = clone(ev); ['from', 'to', 'scorer', 'assist', 'player'].forEach(function (k) { if (e[k]) e[k] = nameOf(e[k]); }); return e;
         }) });
       });
@@ -1497,7 +1544,7 @@
   var statsFilter = '', statsSource = 'current';
   // Lo más importante primero: en el celular se ve sin deslizar la tabla.
   var COLS = [['plusMinus', '+/-'], ['goals', 'Gol'], ['assists', 'Ast'], ['ds', 'D'], ['drops', 'Drop'], ['throwaways', 'TA'],
-    ['completions', 'Pas'], ['catches', 'Rec'], ['points', 'Pts']];
+    ['completions', 'Pas'], ['catches', 'Rec'], ['points', 'Pts'], ['breaks', 'Brk']];
   function statsView() {
     if (statsSource === 'season') return seasonView();
     var h = history.find(function (x) { return x.id === statsSource; });
@@ -1507,7 +1554,7 @@
   }
   function statRows(stats, V) {
     var usesLine = V.points.some(function (p) { return p.line && p.line.length; });
-    var cols = COLS.filter(function (c) { return usesLine || c[0] !== 'points'; });
+    var cols = COLS.filter(function (c) { return usesLine || (c[0] !== 'points' && c[0] !== 'breaks'); });
     var known = {}; V.roster.forEach(function (p) { known[p.id] = true; });
     var rows = Object.keys(stats.players).map(function (id) { return { id: id, s: stats.players[id] }; })
       .filter(function (r) { return (V.kind === 'current' ? known[r.id] : false) || COLS.some(function (c) { return r.s[c[0]]; }); })
@@ -1575,7 +1622,21 @@
     if (!t.rows.length) body.appendChild(el('tr', {}, [el('td', { class: 'muted', text: 'Sin datos todavía' })]));
     table.appendChild(body);
     v.appendChild(el('div', { class: 'card' }, [el('p', { class: 'label', text: 'Por jugador' }), el('div', { class: 'table-wrap' }, [table]),
-      el('p', { class: 'muted small', style: 'margin:10px 0 0', text: 'Pas = pases completos · Rec = recepciones · TA = throwaways · +/- = Gol + Ast + D − Drop − TA' })]));
+      el('p', { class: 'muted small', style: 'margin:10px 0 0', text: 'Pas = pases completos · Rec = recepciones · TA = throwaways · Pts = puntos jugados · Brk = breaks en cancha · +/- = Gol + Ast + D − Drop − TA' })]));
+
+    // Rendimiento por línea: qué línea hace los breaks y cuál sostiene el ataque.
+    var ls = lineStats(V.points);
+    if (ls.length) {
+      var lt = el('table', { class: 'line-table' });
+      lt.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Línea' }), el('th', { text: 'Breaks' }), el('th', { text: 'Holds' })])]));
+      lt.appendChild(el('tbody', {}, ls.map(function (r) {
+        return el('tr', {}, [el('td', { text: r.name }),
+          el('td', { class: r.D.won ? 'pm' : 'zero', text: r.D.played ? r.D.won + ' / ' + r.D.played : '–' }),
+          el('td', { class: r.O.won ? '' : 'zero', text: r.O.played ? r.O.won + ' / ' + r.O.played : '–' })]);
+      })));
+      v.appendChild(el('div', { class: 'card' }, [el('p', { class: 'label', text: 'Por línea' }), el('div', { class: 'table-wrap' }, [lt]),
+        el('p', { class: 'muted small', style: 'margin:10px 0 0', text: 'Breaks = puntos de defensa ganados / jugados. Holds = puntos de ataque ganados / jugados.' })]));
+    }
 
     var conns = stats.connections.slice(0, 6);
     var max = conns.length ? conns[0].count : 1;
@@ -1613,6 +1674,9 @@
 
     // Acciones según lo que se está viendo
     var actions = el('div', { class: 'stack' });
+    if (V.kind !== 'season' && decided(V.points)) {
+      actions.appendChild(el('button', { class: 'btn accent block', type: 'button', icon: 'share', onclick: function () { shareSummary(V); } }, [' Mandar resumen al grupo']));
+    }
     actions.appendChild(el('div', { class: 'row' }, [
       el('button', { class: 'btn', style: 'flex:1', type: 'button', icon: 'download', onclick: function () { exportCsv(V); } }, [' Exportar CSV']),
       V.kind === 'season' ? null : el('button', { class: 'btn', style: 'flex:1', type: 'button', icon: 'share', onclick: function () { shareGameFile(V); } }, [' Enviar partido'])
@@ -1643,6 +1707,57 @@
       ]),
       file
     ]));
+  }
+
+  // Resumen corto para mandar al grupo de WhatsApp.
+  function summaryText(V) {
+    var rosterList = V.kind === 'current' ? roster : V.roster;
+    var st = Core.computeStats(V.points, rosterList);
+    var sc = st.score;
+    function top(key, n) {
+      var ids = Object.keys(st.players).filter(function (id) { return st.players[id][key] > 0; })
+        .sort(function (a, b) { return st.players[b][key] - st.players[a][key]; }).slice(0, n || 3);
+      return ids.map(function (id) { return V.name(id) + ' ' + (key === 'plusMinus' ? '+' : '') + st.players[id][key]; }).join(', ');
+    }
+    var finished = V.kind !== 'current' || game.finished;
+    var res = sc.us > sc.them ? 'Ganamos' : sc.us < sc.them ? 'Perdimos' : 'Empate';
+    var out = ['🥏 Narra' + (V.rival ? ' · vs ' + V.rival : ''),
+      (finished ? res + ' ' : 'Vamos ') + sc.us + '–' + sc.them,
+      'Breaks: ' + st.breaks.won + ' de ' + st.breaks.played + ' · Holds: ' + st.holds.won + ' de ' + st.holds.played];
+    var lb = lineStats(V.points).filter(function (r) { return r.D.won; });
+    if (lb.length) out.push('Breaks por línea: ' + lb.map(function (r) { return r.name + ' ' + r.D.won; }).join(', '));
+    out.push('');
+    var best = Math.max.apply(null, Object.keys(st.players).map(function (id) { return st.players[id].plusMinus; }).concat([0]));
+    var pm = best > 0 ? Object.keys(st.players).filter(function (id) { return st.players[id].plusMinus === best; }).slice(0, 3)
+      .map(function (id) { return V.name(id); }).join(', ') + ' +' + best : '';
+    var g = top('goals'), a = top('assists'), d = top('ds');
+    if (g) out.push('Goles: ' + g);
+    if (a) out.push('Asistencias: ' + a);
+    if (d) out.push('Defensas (D): ' + d);
+    if (pm) out.push('Mejor +/-: ' + pm);
+    if (st.connections.length) out.push('Conexión del partido: ' + V.name(st.connections[0].from) + ' → ' + V.name(st.connections[0].to) + ' (' + st.connections[0].count + ')');
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function shareSummary(V) {
+    var text = summaryText(V || currentStatsView());
+    if (navigator.share) { navigator.share({ title: 'Narra', text: text }).catch(function () {}); return; }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(function () { toast('Resumen copiado: pégalo en el grupo'); }, function () { showText(text); });
+    } else showText(text);
+  }
+
+  function lineStats(points) {
+    var map = {};
+    (points || []).forEach(function (p) {
+      var oc = Core.outcomeOf(p.events || []);
+      if (!oc || !p.line || !p.line.length || (p.type !== 'O' && p.type !== 'D')) return;
+      var name = p.lineName || 'Otras líneas';
+      var r = map[name] || (map[name] = { name: name, O: { played: 0, won: 0 }, D: { played: 0, won: 0 } });
+      r[p.type].played++;
+      if (oc === 'us') r[p.type].won++;
+    });
+    return Object.keys(map).map(function (k) { return map[k]; })
+      .sort(function (a, b) { return b.D.won - a.D.won || b.O.won - a.O.won || (a.name === 'Otras líneas') - (b.name === 'Otras líneas'); });
   }
 
   function fileSlug(V) {

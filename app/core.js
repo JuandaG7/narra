@@ -78,7 +78,8 @@
   // ---------- Palabras clave (frases → marcadores) ----------
   // El orden importa: las frases más específicas van primero.
   var MARKERS = [
-    ['xundox', /\b(borra|borrar|borralo|borrala|cancela|cancelar|corrijo|corrige|me equivoque|error mio|deshacer|deshaz|no fue (gol|punto)|anulado|anulalo|no vale)\b/g],
+    ['xfixx', /\b(no era|no es|no no|no a|no para|corrijo|corrige|perdon|mejor dicho|quise decir)\b/g],
+    ['xundox', /\b(borra|borrar|borralo|borrala|cancela|cancelar|me equivoque|error mio|deshacer|deshaz|no fue (gol|punto)|anulado|anulalo|no vale)\b/g],
     ['xthemx', /\b(nos (anotan|anotaron|anota|anoto|meten|metieron|hacen|hicieron|marcan|marcaron)( el)?( punto| gol)?|(punto|gol|anotan|anotaron|marcan) (de|para) (ellos|el rival|los otros)|(anotan|anotaron) ellos|ellos (anotan|anotaron|marcan)|punto rival|gol rival)\b/g],
     ['xoppdx', /\b((drop|drope|trop) de ellos|ellos dropean|se les cae|se les cayo|la dejan caer)\b/g],
     ['xoppx', /\b(la pierden|pierden ellos|ellos (la )?pierden|error de ellos|(turn|turnover|throwaway|throw away) de ellos|la botan|la tiran afuera|recuperamos)\b/g],
@@ -88,7 +89,7 @@
     ['xtax', /\b(throwaway|throw away|trowaway|trow away|trogue|tro guey|la pierde|la perdio|pierde|perdio|perdida|turnover|turn over|turn|la bota|la boto|bota|boto|afuera|fuera|stall|estol)\b/g],
     ['xgolx', /\b(go+l|golazo|punto|anota|anoto|score|scorea|scoreo)\b/g]
   ];
-  var MARKER_TYPE = { xundox: 'undo', xthemx: 'them', xoppx: 'opp', xoppdx: 'oppdrop', xdropx: 'drop', xdx: 'd', xtax: 'ta', xgolx: 'goal' };
+  var MARKER_TYPE = { xfixx: 'fix', xundox: 'undo', xthemx: 'them', xoppx: 'opp', xoppdx: 'oppdrop', xdropx: 'drop', xdx: 'd', xtax: 'ta', xgolx: 'goal' };
 
   function applyMarkers(norm, rival) {
     var s = ' ' + norm + ' ';
@@ -277,6 +278,34 @@
         }
         continue;
       }
+      // Corrección por voz: "Pipe a Mono, no, a Sara" cambia el último nombre dicho.
+      if (it.kind === 'fix') {
+        if (!nextPlayer) {
+          if (history.length) { var hh = history.pop(); state.events = hh.events; state.holder = hh.holder; state.holderUnc = hh.holderUnc; state.outcome = hh.outcome; }
+          continue;
+        }
+        var np = nextPlayer; i++;
+        var le = last();
+        if (!le) { state.holder = np.id; state.holderUnc = unc(np); continue; }
+        snapshot();
+        var ne = {}; Object.keys(le).forEach(function (k) { ne[k] = le[k]; });
+        delete ne.uncertain;
+        if (le.type === 'pass') { ne.to = np.id; state.holder = np.id; state.holderUnc = unc(np); }
+        else if (le.type === 'goal') {
+          var before = state.events[state.events.length - 2];
+          if (before && before.type === 'pass' && before.to === le.scorer) {
+            var nb = {}; Object.keys(before).forEach(function (k) { nb[k] = before[k]; });
+            nb.to = np.id; state.events[state.events.length - 2] = nb;
+          }
+          ne.scorer = np.id;
+        }
+        else if (le.type === 'd') ne.player = np.id;
+        else if (le.type === 'drop') ne.to = np.id;
+        else if (le.type === 'throwaway') ne.from = np.id;
+        if (unc(np)) ne.uncertain = unc(np);
+        state.events[state.events.length - 1] = ne;
+        continue;
+      }
       // Después de un gol/punto en contra solo aceptamos correcciones.
       if (state.outcome) continue;
 
@@ -399,7 +428,7 @@
   // ---------- Estadísticas ----------
 
   function emptyLine() {
-    return { points: 0, completions: 0, catches: 0, goals: 0, assists: 0, drops: 0, throwaways: 0, ds: 0, plusMinus: 0 };
+    return { points: 0, breaks: 0, completions: 0, catches: 0, goals: 0, assists: 0, drops: 0, throwaways: 0, ds: 0, plusMinus: 0 };
   }
 
   // Tipo del siguiente punto: quien anota hace el pull del siguiente.
@@ -438,7 +467,12 @@
       if (oc === 'them') score.them++;
       if (od[pt.type] && oc) { od[pt.type].played++; if (oc === 'us') od[pt.type].won++; }
       if (typeFilter && pt.type !== typeFilter) return;
-      (pt.line || []).forEach(function (id) { var s = P(id); if (s) s.points++; });
+      (pt.line || []).forEach(function (id) {
+        var s = P(id);
+        if (!s) return;
+        s.points++;
+        if (pt.type === 'D' && oc === 'us') s.breaks++; // estuvo en cancha en un break
+      });
       (pt.events || []).forEach(function (ev) {
         var a, b;
         switch (ev.type) {
