@@ -1557,7 +1557,8 @@
     var cols = COLS.filter(function (c) { return usesLine || (c[0] !== 'points' && c[0] !== 'breaks'); });
     var known = {}; V.roster.forEach(function (p) { known[p.id] = true; });
     var rows = Object.keys(stats.players).map(function (id) { return { id: id, s: stats.players[id] }; })
-      .filter(function (r) { return (V.kind === 'current' ? known[r.id] : false) || COLS.some(function (c) { return r.s[c[0]]; }); })
+      // Si se usaron líneas, solo aparecen los que jugaron; si no, toda la plantilla del partido actual.
+      .filter(function (r) { return (V.kind === 'current' && known[r.id] && (!usesLine || r.s.points > 0)) || COLS.some(function (c) { return r.s[c[0]]; }); })
       .sort(function (a, b) { return b.s.plusMinus - a.s.plusMinus || b.s.goals - a.s.goals || b.s.points - a.s.points || V.name(a.id).localeCompare(V.name(b.id)); });
     return { cols: cols, rows: rows };
   }
@@ -1630,7 +1631,7 @@
       var lt = el('table', { class: 'line-table' });
       lt.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Línea' }), el('th', { text: 'Breaks' }), el('th', { text: 'Holds' })])]));
       lt.appendChild(el('tbody', {}, ls.map(function (r) {
-        return el('tr', {}, [el('td', { text: r.name }),
+        return el('tr', {}, [el('td', {}, [r.name, r.changed ? el('small', { class: 'muted', style: 'display:block;font-weight:500', text: r.changed + (r.changed === 1 ? ' punto con cambios' : ' puntos con cambios') }) : null]),
           el('td', { class: r.D.won ? 'pm' : 'zero', text: r.D.played ? r.D.won + ' / ' + r.D.played : '–' }),
           el('td', { class: r.O.won ? '' : 'zero', text: r.O.played ? r.O.won + ' / ' + r.O.played : '–' })]);
       })));
@@ -1751,8 +1752,11 @@
     (points || []).forEach(function (p) {
       var oc = Core.outcomeOf(p.events || []);
       if (!oc || !p.line || !p.line.length || (p.type !== 'O' && p.type !== 'D')) return;
-      var name = p.lineName || 'Otras líneas';
-      var r = map[name] || (map[name] = { name: name, O: { played: 0, won: 0 }, D: { played: 0, won: 0 } });
+      // "Defensa A (con cambios)" suma en la misma fila que "Defensa A".
+      var changed = / \(con cambios\)$/.test(p.lineName || '');
+      var name = (p.lineName || 'Otras líneas').replace(/ \(con cambios\)$/, '');
+      var r = map[name] || (map[name] = { name: name, changed: 0, O: { played: 0, won: 0 }, D: { played: 0, won: 0 } });
+      if (changed) r.changed++;
       r[p.type].played++;
       if (oc === 'us') r[p.type].won++;
     });

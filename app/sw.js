@@ -1,5 +1,5 @@
 // Service worker: guarda la app para que abra sin internet (red primero, caché si no hay señal).
-var CACHE = 'narra-v3';
+var CACHE = 'narra-v4';
 var FILES = ['./', 'index.html', 'styles.css', 'core.js', 'app.js', 'manifest.webmanifest', 'narra.svg', 'narra-180.png', 'narra-192.png', 'narra-512.png', 'narra-64.png'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }));
