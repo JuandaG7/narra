@@ -1541,7 +1541,20 @@
   }
 
   // ---------- Estadísticas ----------
-  var statsFilter = '', statsSource = 'current';
+  var statsFilter = '', statsSource = 'current', statsSort = 'plusMinus';
+  // Qué significa cada columna, en palabras simples. good = más es mejor; bad = más es peor.
+  var COL_INFO = {
+    plusMinus: { title: '+/- (aporte)', desc: 'Goles + asistencias + D − drops − throwaways. Resume lo que sumó y restó con sus jugadas.', good: true },
+    goals: { title: 'Gol', desc: 'Atrapó el disco en la zona: anotó.', good: true },
+    assists: { title: 'Ast (asistencias)', desc: 'Lanzó el pase del gol.', good: true },
+    ds: { title: 'D (defensas)', desc: 'Bloqueó o interceptó un pase del rival.', good: true },
+    drops: { title: 'Drop', desc: 'Se le cayó un pase que le llegó bien.', bad: true },
+    throwaways: { title: 'TA (throwaways)', desc: 'Perdió el disco lanzando: pase malo, afuera o interceptado.', bad: true },
+    completions: { title: 'Pas (pases)', desc: 'Pases completos que lanzó.', good: true },
+    catches: { title: 'Rec (recepciones)', desc: 'Pases que atrapó.', good: true },
+    points: { title: 'Pts (puntos jugados)', desc: 'En cuántos puntos estuvo en cancha.' },
+    breaks: { title: 'Brk (breaks)', desc: 'En cuántos breaks estuvo en cancha: puntos de defensa que ganamos.', good: true }
+  };
   // Lo más importante primero: en el celular se ve sin deslizar la tabla.
   var COLS = [['plusMinus', '+/-'], ['goals', 'Gol'], ['assists', 'Ast'], ['ds', 'D'], ['drops', 'Drop'], ['throwaways', 'TA'],
     ['completions', 'Pas'], ['catches', 'Rec'], ['points', 'Pts'], ['breaks', 'Brk']];
@@ -1611,19 +1624,38 @@
     v.appendChild(seg([['', 'Todo'], ['O', 'Ataque'], ['D', 'Defensa']], statsFilter, function (val) { statsFilter = val; render(); }));
 
     var t = statRows(stats, V);
-    var table = el('table');
-    table.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Jugador' })].concat(t.cols.map(function (c) { return el('th', { text: c[1] }); })))]));
+    // Orden elegido tocando el encabezado de la columna.
+    if (statsSort !== 'plusMinus' && t.cols.some(function (c) { return c[0] === statsSort; })) {
+      t.rows.sort(function (a, b) { return b.s[statsSort] - a.s[statsSort] || b.s.plusMinus - a.s.plusMinus; });
+    }
+    var maxOf = {};
+    t.cols.forEach(function (c) { maxOf[c[0]] = Math.max.apply(null, t.rows.map(function (r) { return r.s[c[0]]; }).concat([0])); });
+    var table = el('table', { class: 'stats-table' });
+    table.appendChild(el('thead', {}, [el('tr', {}, [el('th', { text: 'Jugador' })].concat(t.cols.map(function (c) {
+      var on = c[0] === statsSort;
+      return el('th', { class: 'sortable' + (on ? ' sorted' : ''), role: 'button', tabindex: '0', title: 'Ordenar por ' + COL_INFO[c[0]].title,
+        onclick: function () { statsSort = on ? 'plusMinus' : c[0]; render(); } }, [c[1] + (on ? ' ▾' : '')]);
+    })))]));
     var body = el('tbody');
     t.rows.forEach(function (r) {
-      body.appendChild(el('tr', {}, [el('td', { text: V.name(r.id) })].concat(t.cols.map(function (c) {
+      body.appendChild(el('tr', { class: 'player-row', onclick: function () { openPlayerCard(r.id, V, stats); } }, [
+        el('td', {}, [el('span', { class: 'pname', text: V.name(r.id) })])
+      ].concat(t.cols.map(function (c) {
         var val = r.s[c[0]];
-        return el('td', { class: (c[0] === 'plusMinus' ? 'pm' : '') + (val === 0 ? ' zero' : ''), text: c[0] === 'plusMinus' && val > 0 ? '+' + val : String(val) });
+        var cls = (c[0] === 'plusMinus' ? 'pm' : '') + (val === 0 ? ' zero' : '') + (c[0] === statsSort ? ' sorted' : '') +
+          (COL_INFO[c[0]].good && val > 0 && val === maxOf[c[0]] ? ' best' : '') + (c[0] === 'plusMinus' && val < 0 ? ' neg' : '');
+        return el('td', { class: cls, text: c[0] === 'plusMinus' && val > 0 ? '+' + val : String(val) });
       }))));
     });
     if (!t.rows.length) body.appendChild(el('tr', {}, [el('td', { class: 'muted', text: 'Sin datos todavía' })]));
     table.appendChild(body);
-    v.appendChild(el('div', { class: 'card' }, [el('p', { class: 'label', text: 'Por jugador' }), el('div', { class: 'table-wrap' }, [table]),
-      el('p', { class: 'muted small', style: 'margin:10px 0 0', text: 'Pas = pases completos · Rec = recepciones · TA = throwaways · Pts = puntos jugados · Brk = breaks en cancha · +/- = Gol + Ast + D − Drop − TA' })]));
+    v.appendChild(el('div', { class: 'card' }, [
+      el('div', { class: 'row', style: 'margin-bottom:6px' }, [
+        el('p', { class: 'label', style: 'margin:0', text: 'Por jugador' }), el('span', { class: 'spacer' }),
+        el('button', { class: 'btn link small', type: 'button', icon: 'help', onclick: function () { openGlossary(t, V) } }, [' ¿Cómo leer?'])
+      ]),
+      el('div', { class: 'table-wrap' }, [table]),
+      el('p', { class: 'muted small', style: 'margin:10px 0 0', text: 'Toca un jugador para ver su ficha. Toca una columna para ordenar.' })]));
 
     // Rendimiento por línea: qué línea hace los breaks y cuál sostiene el ataque.
     var ls = lineStats(V.points);
@@ -1762,6 +1794,71 @@
     });
     return Object.keys(map).map(function (k) { return map[k]; })
       .sort(function (a, b) { return b.D.won - a.D.won || b.O.won - a.O.won || (a.name === 'Otras líneas') - (b.name === 'Otras líneas'); });
+  }
+
+  // Guía de la tabla con ejemplos sacados del mismo partido.
+  function openGlossary(t, V) {
+    openSheet(function (sh) {
+      sh.appendChild(el('h3', { text: '¿Cómo leer las stats?' }));
+      var list = el('div', { class: 'glossary' });
+      t.cols.forEach(function (c) {
+        var info = COL_INFO[c[0]];
+        var top = t.rows.slice().sort(function (a, b) { return b.s[c[0]] - a.s[c[0]]; })[0];
+        var ex = top && top.s[c[0]] > 0 ? 'Ej.: ' + V.name(top.id) + ' ' + (c[0] === 'plusMinus' ? '+' : '') + top.s[c[0]] : '';
+        list.appendChild(el('div', { class: 'gl-row' }, [
+          el('span', { class: 'gl-key' + (info.bad ? ' bad' : ''), text: c[1] }),
+          el('div', {}, [el('b', { text: info.title }), el('div', { class: 'small', text: info.desc }), ex ? el('div', { class: 'small muted', text: ex }) : null])
+        ]));
+      });
+      sh.appendChild(list);
+      sh.appendChild(el('p', { class: 'muted small', style: 'margin:12px 0 0', text: 'Ojo: el +/- solo cuenta jugadas con disco. Marcar bien o abrir espacios no aparece; para eso mira Pts y Brk.' }));
+    });
+  }
+
+  // Ficha del jugador, escrita en frases para que cualquiera la entienda.
+  function openPlayerCard(id, V, stats) {
+    var s = stats.players[id];
+    if (!s) return;
+    var name = V.name(id);
+    var total = V.points.filter(function (p) { return Core.outcomeOf(p.events || []) && (!statsFilter || p.type === statsFilter); }).length;
+    var usesLine = V.points.some(function (p) { return p.line && p.line.length; });
+    openSheet(function (sh) {
+      var p = byId(id);
+      sh.appendChild(el('div', { class: 'pc-head' }, [
+        el('h3', { style: 'margin:0', text: name }),
+        p && p.number ? el('span', { class: 'muted', text: '#' + p.number }) : null,
+        statsFilter ? el('span', { class: 'badge mini ' + statsFilter, text: statsFilter === 'O' ? 'Solo ataque' : 'Solo defensa' }) : null
+      ]));
+      if (usesLine) sh.appendChild(el('p', { class: 'muted', style: 'margin:4px 0 12px', text: 'Jugó ' + s.points + ' de ' + total + ' puntos' + (s.breaks ? ' · estuvo en ' + s.breaks + (s.breaks === 1 ? ' break' : ' breaks') : '') }));
+
+      // +/- desglosado
+      var parts = [['+', s.goals, s.goals === 1 ? 'gol' : 'goles'], ['+', s.assists, s.assists === 1 ? 'asistencia' : 'asistencias'], ['+', s.ds, 'D'],
+        ['−', s.drops, s.drops === 1 ? 'drop' : 'drops'], ['−', s.throwaways, s.throwaways === 1 ? 'throwaway' : 'throwaways']];
+      sh.appendChild(el('div', { class: 'pc-pm' }, [
+        el('div', { class: 'pc-pm-n' + (s.plusMinus < 0 ? ' neg' : ''), text: (s.plusMinus > 0 ? '+' : '') + s.plusMinus }),
+        el('div', {}, [el('b', { text: 'Aporte (+/-)' }), el('div', { class: 'pc-chips' }, parts.map(function (x) {
+          return el('span', { class: 'pc-chip ' + (x[0] === '+' ? 'plus' : 'minus') + (x[1] ? '' : ' zero'), text: x[0] + x[1] + ' ' + x[2] });
+        }))])
+      ]));
+
+      // En frases
+      var lines = [];
+      if (s.completions || s.catches) lines.push('Lanzó ' + s.completions + ' pases completos y atrapó ' + s.catches + '.');
+      if (s.goals || s.assists) lines.push((s.goals ? 'Anotó ' + s.goals + (s.goals === 1 ? ' gol' : ' goles') : 'No anotó') + (s.assists ? ' y dio ' + s.assists + (s.assists === 1 ? ' asistencia.' : ' asistencias.') : '.'));
+      if (s.ds) lines.push('Hizo ' + s.ds + (s.ds === 1 ? ' defensa (D).' : ' defensas (D).'));
+      if (s.drops || s.throwaways) lines.push('Perdió el disco ' + (s.drops + s.throwaways) + (s.drops + s.throwaways === 1 ? ' vez' : ' veces') + ' (' + [s.drops ? s.drops + ' drop' + (s.drops > 1 ? 's' : '') : '', s.throwaways ? s.throwaways + ' throwaway' + (s.throwaways > 1 ? 's' : '') : ''].filter(Boolean).join(', ') + ').');
+      if (!lines.length) lines.push('No tocó el disco en las jugadas narradas.');
+      sh.appendChild(el('ul', { class: 'pc-lines' }, lines.map(function (t) { return el('li', { text: t }); })));
+
+      // Con quién se conectó
+      var to = stats.connections.filter(function (c) { return c.from === id; }).slice(0, 3);
+      var from = stats.connections.filter(function (c) { return c.to === id; }).slice(0, 3);
+      if (to.length || from.length) {
+        sh.appendChild(el('p', { class: 'label', style: 'margin:14px 0 6px', text: 'Conexiones' }));
+        if (to.length) sh.appendChild(el('p', { class: 'small', style: 'margin:0 0 4px', text: 'Le pasó más a: ' + to.map(function (c) { return V.name(c.to) + ' (' + c.count + ')'; }).join(', ') }));
+        if (from.length) sh.appendChild(el('p', { class: 'small', style: 'margin:0', text: 'Recibió más de: ' + from.map(function (c) { return V.name(c.from) + ' (' + c.count + ')'; }).join(', ') }));
+      }
+    });
   }
 
   function fileSlug(V) {

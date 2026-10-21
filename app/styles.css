@@ -459,3 +459,27 @@ body.focus .point-head .title { font-size: 22px; }
 .line-table td:first-child { white-space: normal; min-width: 120px; }
 .line-table td, .line-table th { text-align: right; }
 .line-table td:first-child, .line-table th:first-child { text-align: left; }
+
+/* ---------- Stats fáciles de leer ---------- */
+.stats-table th.sortable { cursor: pointer; user-select: none; transition: color var(--fast); }
+.stats-table th.sorted { color: var(--accent-ink); }
+.stats-table td.sorted { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.stats-table td.best { color: var(--accent-ink); font-weight: 800; }
+.stats-table td.neg { color: #C2361B; }
+.stats-table tr.player-row { cursor: pointer; transition: background-color var(--fast); }
+.stats-table tr.player-row:active td { background: var(--sunk); }
+.stats-table .pname { border-bottom: 1.5px dotted var(--muted); }
+.glossary { display: flex; flex-direction: column; gap: 12px; }
+.gl-row { display: flex; gap: 12px; align-items: flex-start; }
+.gl-key { flex: none; min-width: 46px; text-align: center; padding: 4px 6px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink); font-weight: 800; font-size: 13px; }
+.gl-key.bad { background: var(--sunk); color: var(--ink); }
+.pc-head { display: flex; align-items: center; gap: 10px; }
+.pc-pm { display: flex; gap: 14px; align-items: center; background: var(--sunk); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; }
+.pc-pm-n { font-size: 38px; font-weight: 800; color: var(--accent-ink); min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
+.pc-pm-n.neg { color: #C2361B; }
+.pc-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.pc-chip { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
+.pc-chip.plus { background: var(--accent-soft); color: var(--accent-ink); }
+.pc-chip.minus { background: var(--card); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line); }
+.pc-chip.zero { opacity: .45; }
+.pc-lines { margin: 0; padding-left: 18px; line-height: 1.6; }
