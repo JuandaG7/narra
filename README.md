@@ -1,4 +1,4 @@
-# Demo (nombre provisional)
+# Narra
 
 Prototipo para registrar estadísticas de ultimate **narrando el partido por voz** desde el celular.
 Todo funciona en el teléfono: plantilla, interpretación y estadísticas se guardan en el navegador

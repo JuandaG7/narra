@@ -1,18 +1,68 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="116" fill="#FF5A1F"/>
-  <!-- líneas de movimiento -->
-  <g stroke="#FFFFFF" stroke-linecap="round" stroke-width="18" opacity=".55">
-    <line x1="70" y1="318" x2="132" y2="304"/>
-    <line x1="92" y1="362" x2="168" y2="344"/>
-  </g>
-  <g transform="rotate(-12 280 250)">
-    <!-- canto -->
-    <path d="M128 250 v18 a152 72 0 0 0 304 0 v-18 z" fill="#B83A0C"/>
-    <!-- cara superior -->
-    <ellipse cx="280" cy="250" rx="152" ry="72" fill="#FFFFFF"/>
-    <!-- borde (aro) -->
-    <ellipse cx="280" cy="250" rx="126" ry="56" fill="none" stroke="#FFD2BF" stroke-width="9"/>
-    <!-- brillo -->
-    <ellipse cx="236" cy="226" rx="54" ry="16" fill="#FFFFFF" opacity=".9"/>
+  <defs>
+    <filter id="brush" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="11" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="18" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="soft" x="-10%" y="-10%" width="120%" height="120%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="4" result="n"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <!-- empaste: surcos de cerdas del pincel con luz rasante -->
+    <filter id="impasto" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.05 0.35" numOctaves="3" seed="9" result="bristle"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="2" seed="2" result="warp"/>
+      <feDisplacementMap in="bristle" in2="warp" scale="60" xChannelSelector="R" yChannelSelector="G" result="ridges"/>
+      <feDiffuseLighting in="ridges" surfaceScale="3.2" lighting-color="#ffffff" result="light">
+        <feDistantLight azimuth="225" elevation="48"/>
+      </feDiffuseLighting>
+      <feComponentTransfer in="light" result="lightSoft">
+        <feFuncR type="linear" slope=".55" intercept=".5"/>
+        <feFuncG type="linear" slope=".55" intercept=".5"/>
+        <feFuncB type="linear" slope=".55" intercept=".5"/>
+      </feComponentTransfer>
+      <feBlend in="SourceGraphic" in2="lightSoft" mode="multiply" result="shaded"/>
+      <feComposite in="shaded" in2="SourceGraphic" operator="in"/>
+    </filter>
+    <clipPath id="sq"><rect width="512" height="512" rx="116"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#sq)" filter="url(#impasto)">
+    <rect width="512" height="512" fill="#22305F"/>
+    <!-- fondo en pinceladas cruzadas -->
+    <g filter="url(#brush)" stroke-linecap="round" fill="none">
+      <path d="M-40 40 L 300 -40" stroke="#2C3D78" stroke-width="90"/>
+      <path d="M200 60 L 560 10" stroke="#1C2A55" stroke-width="80"/>
+      <path d="M-40 150 C 120 110, 260 170, 560 120" stroke="#30448A" stroke-width="70"/>
+      <path d="M-40 430 L 260 360" stroke="#2A3B76" stroke-width="110"/>
+      <path d="M220 520 L 560 420" stroke="#1A2550" stroke-width="120"/>
+      <path d="M-40 520 C 100 470, 200 500, 300 470" stroke="#3A4F96" stroke-width="40" opacity=".8"/>
+      <path d="M380 340 L 560 300" stroke="#4A60A8" stroke-width="26" opacity=".6"/>
+      <path d="M20 250 L 120 230" stroke="#4A60A8" stroke-width="20" opacity=".5"/>
+    </g>
+
+    <!-- estela -->
+    <g filter="url(#brush)" stroke-linecap="round" fill="none">
+      <path d="M48 326 L 168 300" stroke="#E0A93E" stroke-width="20"/>
+      <path d="M72 372 L 198 344" stroke="#F2D38A" stroke-width="14" opacity=".85"/>
+    </g>
+
+    <!-- disco -->
+    <g transform="rotate(-12 290 250)">
+      <g filter="url(#soft)">
+        <ellipse cx="290" cy="270" rx="160" ry="72" fill="#8E2C0C"/>
+        <ellipse cx="290" cy="250" rx="160" ry="74" fill="#F2541B"/>
+      </g>
+      <g filter="url(#brush)" fill="none" stroke-linecap="round">
+        <path d="M150 262 C 175 300, 360 315, 432 262" stroke="#C9390C" stroke-width="26"/>
+        <path d="M152 236 C 200 190, 330 180, 428 228" stroke="#FF7A35" stroke-width="22"/>
+        <path d="M190 250 C 240 236, 330 232, 388 246" stroke="#FF9A55" stroke-width="18"/>
+        <path d="M206 214 C 240 200, 300 196, 338 204" stroke="#FFE3C2" stroke-width="14"/>
+        <path d="M352 200 C 372 204, 392 210, 404 218" stroke="#FFD08E" stroke-width="10"/>
+      </g>
+      <g filter="url(#soft)" fill="none">
+        <ellipse cx="290" cy="250" rx="124" ry="54" stroke="#FFB27D" stroke-width="6" opacity=".85"/>
+      </g>
+    </g>
   </g>
 </svg>

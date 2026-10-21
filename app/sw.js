@@ -1,6 +1,6 @@
 // Service worker: guarda la app para que abra sin internet (red primero, caché si no hay señal).
-var CACHE = 'demo-v7';
-var FILES = ['./', 'index.html', 'styles.css', 'core.js', 'app.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
+var CACHE = 'narra-v1';
+var FILES = ['./', 'index.html', 'styles.css', 'core.js', 'app.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'icon-64.png'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }));
   self.skipWaiting();

@@ -1,4 +1,4 @@
-/* Demo (nombre provisional) — interfaz. La interpretación y las estadísticas viven en core.js. */
+/* Narra — interfaz. La interpretación y las estadísticas viven en core.js. */
 (function () {
   'use strict';
   var Core = window.UltiCore;
@@ -1233,8 +1233,8 @@
         el('p', { class: 'muted small', style: 'margin:0', text: 'Si la app falló en un partido, envía este reporte para revisarlo.' }),
         el('div', { class: 'row' }, [
           el('button', { class: 'btn small', style: 'flex:1', type: 'button', icon: 'share', onclick: function () {
-            var text = 'Reporte Demo\n' + errs.map(function (x) { return x.t + ' [' + x.phase + '] ' + x.msg; }).join('\n') + '\n' + errs[errs.length - 1].ua;
-            if (navigator.share) navigator.share({ title: 'Reporte Demo', text: text }).catch(function () {}); else showText(text);
+            var text = 'Reporte Narra\n' + errs.map(function (x) { return x.t + ' [' + x.phase + '] ' + x.msg; }).join('\n') + '\n' + errs[errs.length - 1].ua;
+            if (navigator.share) navigator.share({ title: 'Reporte Narra', text: text }).catch(function () {}); else showText(text);
           } }, [' Enviar reporte']),
           el('button', { class: 'btn small ghost', type: 'button', text: 'Borrar', onclick: function () { save(KEY_ERRORS, []); render(); } })
         ])
@@ -1245,14 +1245,14 @@
 
   // ---------- Compartir / pegar plantilla (texto simple, sirve por WhatsApp) ----------
   function rosterText() {
-    return ['Plantilla Demo'].concat(sorted(roster).map(function (p) {
+    return ['Plantilla Narra'].concat(sorted(roster).map(function (p) {
       return [p.name, p.number || '', isMixed() && p.gender ? p.gender : ''].filter(Boolean).join(' ') +
         (p.aliases && p.aliases.length ? ' | ' + p.aliases.join(', ') : '');
     })).join('\n');
   }
   function shareRoster() {
     var text = rosterText();
-    if (navigator.share) { navigator.share({ title: 'Plantilla Demo', text: text }).catch(function () {}); return; }
+    if (navigator.share) { navigator.share({ title: 'Plantilla Narra', text: text }).catch(function () {}); return; }
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text).then(function () { toast('Lista copiada: pégala en el otro celular'); }, function () { showText(text); });
     } else showText(text);
@@ -1275,7 +1275,7 @@
     lines.forEach(function (line) {
       line = line.replace(/[♀]/g, ' chica ').replace(/[♂]/g, ' chico ').trim();
       line = line.replace(/^\s*(\d{1,3}[.)]|[-•*·])\s+/, ''); // numeración o viñetas de WhatsApp
-      if (!line || /^plantilla( ultivoz| demo)?$/i.test(line)) return;
+      if (!line || /^plantilla( ultivoz| demo| narra)?$/i.test(line)) return;
       var parts = line.split('|');
       var aliases = (parts[1] || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
       var number = '', gender = null, name = [];
@@ -1647,7 +1647,7 @@
 
   function fileSlug(V) {
     var base = V.kind === 'season' ? 'temporada' : (V.rival ? Core.normalize(V.rival).replace(/ /g, '-') : 'partido');
-    return 'demo-' + base + '-' + new Date().toISOString().slice(0, 10);
+    return 'narra-' + base + '-' + new Date().toISOString().slice(0, 10);
   }
   function download(blob, name) {
     var a = el('a', { href: URL.createObjectURL(blob), download: name });
@@ -1666,7 +1666,7 @@
   }
   function exportCsv(V) {
     var file = buildCsv(V || currentStatsView());
-    shareOrDownload(file.blob, file.name, 'text/csv', 'Stats Demo');
+    shareOrDownload(file.blob, file.name, 'text/csv', 'Stats Narra');
   }
   function buildCsv(V) {
     var rosterList = V.kind === 'current' ? roster : V.roster;
@@ -1696,13 +1696,13 @@
   function shareGameFile(V) {
     var snap = V.kind === 'current' ? snapshotGame(game) : V.game;
     if (V.kind === 'current' && !snap.id) { archiveCurrent(); snap = snapshotGame(game); }
-    var blob = new Blob([JSON.stringify({ app: 'demo-ultimate', version: 1, game: snap })], { type: 'application/json' });
-    shareOrDownload(blob, fileSlug(V) + '.json', 'application/json', 'Partido Demo');
+    var blob = new Blob([JSON.stringify({ app: 'narra', version: 1, game: snap })], { type: 'application/json' });
+    shareOrDownload(blob, fileSlug(V) + '.json', 'application/json', 'Partido Narra');
   }
   function backupAll() {
     archiveCurrent();
-    var blob = new Blob([JSON.stringify({ app: 'demo-ultimate', version: 1, roster: roster, lines: lines, settings: settings, history: history })], { type: 'application/json' });
-    shareOrDownload(blob, 'demo-respaldo-' + new Date().toISOString().slice(0, 10) + '.json', 'application/json', 'Respaldo Demo');
+    var blob = new Blob([JSON.stringify({ app: 'narra', version: 1, roster: roster, lines: lines, settings: settings, history: history })], { type: 'application/json' });
+    shareOrDownload(blob, 'narra-respaldo-' + new Date().toISOString().slice(0, 10) + '.json', 'application/json', 'Respaldo Narra');
   }
   function importFile(f) {
     var reader = new FileReader();
