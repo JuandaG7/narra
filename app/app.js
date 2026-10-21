@@ -1745,7 +1745,12 @@
   }
   show(roster.length ? 'game' : 'roster');
 
-  if ('serviceWorker' in navigator && window.isSecureContext && location.hostname !== 'localhost') {
-    navigator.serviceWorker.register('sw.js').catch(function () {});
+  if ('serviceWorker' in navigator && window.isSecureContext) {
+    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+      // En el computador no usamos modo sin conexión: así siempre se ve la última versión.
+      navigator.serviceWorker.getRegistrations().then(function (regs) { regs.forEach(function (r) { r.unregister(); }); }).catch(function () {});
+    } else {
+      navigator.serviceWorker.register('sw.js').then(function (reg) { reg.update(); }).catch(function () {});
+    }
   }
 })();

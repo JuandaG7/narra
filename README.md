@@ -68,7 +68,7 @@ Todo funciona en el teléfono: plantilla, interpretación y estadísticas se gua
 ## Correr en el computador
 
 ```bash
-python3 -m http.server 8000 --bind 0.0.0.0
+python3 servidor.py
 ```
 
 Abre http://localhost:8000 (redirige a `app/`). En Claude Code ya está en `.claude/launch.json` como `ultivoz`.

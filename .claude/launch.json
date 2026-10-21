@@ -4,7 +4,10 @@
     {
       "name": "ultivoz",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8000", "--bind", "0.0.0.0"],
+      "runtimeArgs": [
+        "servidor.py",
+        "8000"
+      ],
       "port": 8000
     }
   ]
