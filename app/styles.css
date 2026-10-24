@@ -483,3 +483,8 @@ body.focus .point-head .title { font-size: 22px; }
 .pc-chip.minus { background: var(--card); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line); }
 .pc-chip.zero { opacity: .45; }
 .pc-lines { margin: 0; padding-left: 18px; line-height: 1.6; }
+
+/* Vista previa de la tarjeta para compartir */
+.card-preview { border-radius: var(--radius); overflow: hidden; background: var(--sunk); margin-bottom: 12px; max-height: 52vh; overflow-y: auto; }
+.card-preview img { display: block; width: 100%; height: auto; }
+.btn[disabled] { opacity: .5; }

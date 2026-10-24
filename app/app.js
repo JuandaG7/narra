@@ -857,8 +857,7 @@
         el('div', { style: 'font-size:20px;font-weight:800', text: playerName(c.from) + ' → ' + playerName(c.to) + ' · ' + c.count })]));
     }
     v.appendChild(el('div', { class: 'stack' }, [
-      el('button', { class: 'btn accent big block', type: 'button', icon: 'share', onclick: function () { shareSummary(currentStatsView()); } }, [' Mandar resumen al grupo']),
-      el('button', { class: 'btn block', type: 'button', icon: 'download', onclick: shareResults }, [' Stats completas (CSV)']),
+      el('button', { class: 'btn accent big block', type: 'button', icon: 'share', onclick: function () { shareSummary(currentStatsView()); } }, [' Compartir resultados']),
       el('button', { class: 'btn block', type: 'button', icon: 'share', onclick: function () { shareGameFile(currentStatsView()); } }, [' Enviar partido a otro celular']),
       el('div', { class: 'row' }, [
         el('button', { class: 'btn', style: 'flex:1', type: 'button', text: 'Ver stats', onclick: function () { show('stats'); } }),
@@ -869,9 +868,6 @@
   }
 
   // Comparte el CSV (WhatsApp, correo…) si el celular lo permite; si no, lo descarga.
-  function shareResults() {
-    exportCsv(currentStatsView());
-  }
   // --- Grabando ---
   function renderRecording(v) {
     var d = game.draft;
@@ -1708,10 +1704,10 @@
     // Acciones según lo que se está viendo
     var actions = el('div', { class: 'stack' });
     if (V.kind !== 'season' && decided(V.points)) {
-      actions.appendChild(el('button', { class: 'btn accent block', type: 'button', icon: 'share', onclick: function () { shareSummary(V); } }, [' Mandar resumen al grupo']));
+      actions.appendChild(el('button', { class: 'btn accent block', type: 'button', icon: 'share', onclick: function () { shareSummary(V); } }, [' Compartir resultados']));
     }
     actions.appendChild(el('div', { class: 'row' }, [
-      el('button', { class: 'btn', style: 'flex:1', type: 'button', icon: 'download', onclick: function () { exportCsv(V); } }, [' Exportar CSV']),
+      el('button', { class: 'btn', style: 'flex:1', type: 'button', icon: 'download', onclick: function () { exportCsv(V); } }, [' Archivo para Excel']),
       V.kind === 'season' ? null : el('button', { class: 'btn', style: 'flex:1', type: 'button', icon: 'share', onclick: function () { shareGameFile(V); } }, [' Enviar partido'])
     ]));
     if (V.kind === 'current') {
@@ -1742,41 +1738,213 @@
     ]));
   }
 
-  // Resumen corto para mandar al grupo de WhatsApp.
-  function summaryText(V) {
+  // ---------- Compartir resultados: tarjeta-imagen + texto para WhatsApp ----------
+  // Datos del partido ya calculados para la tarjeta y el texto.
+  function matchData(V) {
     var rosterList = V.kind === 'current' ? roster : V.roster;
     var st = Core.computeStats(V.points, rosterList);
-    var sc = st.score;
-    function top(key, n) {
-      var ids = Object.keys(st.players).filter(function (id) { return st.players[id][key] > 0; })
-        .sort(function (a, b) { return st.players[b][key] - st.players[a][key]; }).slice(0, n || 3);
-      return ids.map(function (id) { return V.name(id) + ' ' + (key === 'plusMinus' ? '+' : '') + st.players[id][key]; }).join(', ');
-    }
     var finished = V.kind !== 'current' || game.finished;
-    var res = sc.us > sc.them ? 'Ganamos' : sc.us < sc.them ? 'Perdimos' : 'Empate';
-    var out = ['🥏 Narra' + (V.rival ? ' · vs ' + V.rival : ''),
-      (finished ? res + ' ' : 'Vamos ') + sc.us + '–' + sc.them,
-      'Breaks: ' + st.breaks.won + ' de ' + st.breaks.played + ' · Holds: ' + st.holds.won + ' de ' + st.holds.played];
-    var lb = lineStats(V.points).filter(function (r) { return r.D.won; });
-    if (lb.length) out.push('Breaks por línea: ' + lb.map(function (r) { return r.name + ' ' + r.D.won; }).join(', '));
+    var sc = st.score;
+    function leaders(key, n) {
+      var ids = Object.keys(st.players).filter(function (id) { return st.players[id][key] > 0; })
+        .sort(function (a, b) { return st.players[b][key] - st.players[a][key]; });
+      if (!ids.length) return null;
+      var top = st.players[ids[0]][key];
+      return { value: top, names: ids.filter(function (id) { return st.players[id][key] === top; }).slice(0, n || 2).map(V.name),
+        list: ids.slice(0, 3).map(function (id) { return { name: V.name(id), value: st.players[id][key] }; }) };
+    }
+    var rows = statRows(st, V).rows.filter(function (r) { return r.s.points || r.s.goals || r.s.assists || r.s.ds || r.s.completions || r.s.catches; });
+    var date = new Date(V.game ? (V.game.finishedAt || V.game.createdAt) : (game.finishedAt || game.createdAt || Date.now()));
+    return {
+      st: st, sc: sc, finished: finished, rival: V.rival || '',
+      result: sc.us > sc.them ? 'Ganamos' : sc.us < sc.them ? 'Perdimos' : 'Empate',
+      date: date.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }),
+      goals: leaders('goals'), assists: leaders('assists'), ds: leaders('ds'), pm: leaders('plusMinus'),
+      lines: lineStats(V.points).filter(function (r) { return r.D.won; }),
+      conn: st.connections[0] ? { from: V.name(st.connections[0].from), to: V.name(st.connections[0].to), count: st.connections[0].count } : null,
+      rows: rows, name: V.name
+    };
+  }
+
+  // Texto con el formato de WhatsApp (*negrita*), corto y ordenado.
+  function summaryText(V) {
+    var m = matchData(V);
+    var join = function (l) { return l.list.map(function (x) { return x.name + ' ' + x.value; }).join(' · '); };
+    var out = ['🥏 *Narra*' + (m.rival ? ' · vs ' + m.rival : ''),
+      '*' + (m.finished ? m.result + ' ' : 'Vamos ') + m.sc.us + '–' + m.sc.them + '*',
+      'Breaks ' + m.st.breaks.won + '/' + m.st.breaks.played + ' · Holds ' + m.st.holds.won + '/' + m.st.holds.played];
+    if (m.lines.length) out.push('Breaks por línea: ' + m.lines.map(function (r) { return r.name + ' ' + r.D.won; }).join(' · '));
     out.push('');
-    var best = Math.max.apply(null, Object.keys(st.players).map(function (id) { return st.players[id].plusMinus; }).concat([0]));
-    var pm = best > 0 ? Object.keys(st.players).filter(function (id) { return st.players[id].plusMinus === best; }).slice(0, 3)
-      .map(function (id) { return V.name(id); }).join(', ') + ' +' + best : '';
-    var g = top('goals'), a = top('assists'), d = top('ds');
-    if (g) out.push('Goles: ' + g);
-    if (a) out.push('Asistencias: ' + a);
-    if (d) out.push('Defensas (D): ' + d);
-    if (pm) out.push('Mejor +/-: ' + pm);
-    if (st.connections.length) out.push('Conexión del partido: ' + V.name(st.connections[0].from) + ' → ' + V.name(st.connections[0].to) + ' (' + st.connections[0].count + ')');
+    if (m.goals) out.push('🎯 *Goles:* ' + join(m.goals));
+    if (m.assists) out.push('🤝 *Asistencias:* ' + join(m.assists));
+    if (m.ds) out.push('🛡️ *Defensas:* ' + join(m.ds));
+    if (m.pm) out.push('⭐ *Mejor +/-:* ' + m.pm.names.join(', ') + ' +' + m.pm.value);
+    if (m.conn) out.push('🔗 *Conexión:* ' + m.conn.from + ' → ' + m.conn.to + ' (' + m.conn.count + ')');
     return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
+
+  // Dibuja la tarjeta del partido (1080 px de ancho, como foto de celular) con la paleta Óleo.
+  function drawCard(V) {
+    var m = matchData(V);
+    var C = { bg: '#F3EBDD', card: '#FBF7F0', sunk: '#E8DFCE', ink: '#1B2547', muted: '#6A6878', line: '#DDD2BF',
+      accent: '#F2541B', accentInk: '#A33A10', soft: '#FADBC9', solid: '#22305F', onSolid: '#F7F1E6', neg: '#C2361B' };
+    var SANS = 'ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    var SERIF = '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif';
+    var W = 1080, P = 64;
+    var rows = m.rows.slice(0, 24); // todos los que jugaron: cada uno busca su nombre
+    var leadersList = [['MÁS GOLES', m.goals], ['MÁS ASISTENCIAS', m.assists], ['MÁS DEFENSAS', m.ds], ['MEJOR +/-', m.pm]].filter(function (x) { return x[1]; });
+    var yLeaders = 800, leaderH = 136;
+    var yTable = yLeaders + (leadersList.length ? 56 + Math.ceil(leadersList.length / 2) * (leaderH + 20) : 0) + 10;
+    var tableH = rows.length ? 96 + rows.length * 56 + 24 : 0;
+    var yExtra = yTable + tableH + (rows.length ? 24 : 0);
+    var extras = (m.lines.length ? 1 : 0) + (m.conn ? 1 : 0);
+    var H = yExtra + extras * 52 + 110;
+
+    var cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    var x = cv.getContext('2d');
+    function rr(px, py, w, h, r, fill) {
+      x.beginPath(); x.moveTo(px + r, py); x.arcTo(px + w, py, px + w, py + h, r); x.arcTo(px + w, py + h, px, py + h, r);
+      x.arcTo(px, py + h, px, py, r); x.arcTo(px, py, px + w, py, r); x.closePath(); x.fillStyle = fill; x.fill();
+    }
+    function tx(str, px, py, font, color, align, maxW) {
+      x.font = font; x.fillStyle = color; x.textAlign = align || 'left'; x.textBaseline = 'alphabetic';
+      str = String(str);
+      if (maxW) { while (str.length > 1 && x.measureText(str).width > maxW) str = str.slice(0, -2) + '…'; }
+      x.fillText(str, px, py);
+      return x.measureText(str).width;
+    }
+    function spaced(str, px, py, size, color, align) { // etiquetas en mayúsculas con espaciado
+      x.font = '800 ' + size + 'px ' + SANS;
+      if ('letterSpacing' in x) x.letterSpacing = (size * 0.12) + 'px';
+      tx(str, px, py, '800 ' + size + 'px ' + SANS, color, align);
+      if ('letterSpacing' in x) x.letterSpacing = '0px';
+    }
+
+    // Fondo lienzo
+    x.fillStyle = C.bg; x.fillRect(0, 0, W, H);
+
+    return new Promise(function (resolve) {
+      var logo = new Image();
+      logo.onload = logo.onerror = function () {
+        // Encabezado
+        if (logo.naturalWidth) { x.save(); rr(P, 56, 92, 92, 22, '#000'); x.clip(); x.drawImage(logo, P, 56, 92, 92); x.restore(); }
+        tx('Narra', P + 116, 124, 'italic 700 64px ' + SERIF, C.ink);
+        tx(m.date, W - P, 116, '700 32px ' + SANS, C.muted, 'right');
+
+        // Marcador
+        rr(P, 190, W - 2 * P, 380, 36, C.card);
+        spaced((m.finished ? 'FINAL' : 'VAMOS') + (m.rival ? ' · VS ' + m.rival.toUpperCase() : ''), W / 2, 262, 30, C.muted, 'center');
+        tx(m.sc.us + '–' + m.sc.them, W / 2, 452, '800 190px ' + SANS, C.ink, 'center');
+        if (m.finished) {
+          x.font = '800 34px ' + SANS;
+          var pw = x.measureText(m.result.toUpperCase()).width + 64;
+          rr(W / 2 - pw / 2, 486, pw, 60, 30, m.result === 'Ganamos' ? C.accent : C.solid);
+          spaced(m.result.toUpperCase(), W / 2, 528, 30, '#FFFFFF', 'center');
+        }
+
+        // Holds / Breaks
+        var mw = (W - 2 * P - 24) / 2;
+        [['HOLDS', m.st.holds, C.accent, 'puntos de ataque ganados'], ['BREAKS', m.st.breaks, C.solid, 'puntos de defensa ganados']].forEach(function (it, i) {
+          var mx = P + i * (mw + 24), my = 600;
+          rr(mx, my, mw, 170, 28, C.card);
+          spaced(it[0], mx + 32, my + 52, 26, C.muted);
+          var vw = tx(it[1].won, mx + 32, my + 122, '800 72px ' + SANS, C.ink);
+          tx(' / ' + it[1].played, mx + 32 + vw, my + 122, '700 38px ' + SANS, C.muted);
+          rr(mx + 32, my + 142, mw - 64, 10, 5, C.sunk);
+          if (it[1].played && it[1].won) rr(mx + 32, my + 142, (mw - 64) * it[1].won / it[1].played, 10, 5, it[2]);
+        });
+
+        // Líderes
+        if (leadersList.length) {
+          spaced('LÍDERES', P + 8, yLeaders + 30, 26, C.muted);
+          leadersList.forEach(function (it, i) {
+            var lx = P + (i % 2) * (mw + 24), ly = yLeaders + 56 + Math.floor(i / 2) * (leaderH + 20);
+            rr(lx, ly, mw, leaderH, 28, C.card);
+            spaced(it[0], lx + 32, ly + 46, 22, C.muted);
+            tx(it[1].names.join(', '), lx + 32, ly + 104, '800 40px ' + SANS, C.ink, 'left', mw - 170);
+            tx((it[0] === 'MEJOR +/-' ? '+' : '') + it[1].value, lx + mw - 32, ly + 106, '800 66px ' + SANS, C.accentInk, 'right');
+          });
+        }
+
+        // Tabla
+        if (rows.length) {
+          rr(P, yTable, W - 2 * P, tableH, 32, C.card);
+          var cols = [['+/-', 'plusMinus', 600], ['GOL', 'goals', 700], ['AST', 'assists', 790], ['D', 'ds', 870], ['PÉRD', 'lost', W - P - 32]];
+          var hy = yTable + 62;
+          spaced('JUGADOR', P + 32, hy, 22, C.muted);
+          cols.forEach(function (c) { spaced(c[0], c[2], hy, 22, C.muted, 'right'); });
+          var maxOf = {};
+          cols.forEach(function (c) { maxOf[c[1]] = Math.max.apply(null, rows.map(function (r) { return c[1] === 'lost' ? 0 : r.s[c[1]]; }).concat([0])); });
+          rows.forEach(function (r, i) {
+            var ry = yTable + 96 + i * 56;
+            if (i % 2 === 0) { x.fillStyle = 'rgba(232,223,206,.45)'; x.fillRect(P + 16, ry, W - 2 * P - 32, 56); }
+            var by = ry + 39;
+            tx(m.name(r.id), P + 32, by, '700 34px ' + SANS, C.ink, 'left', 470);
+            cols.forEach(function (c) {
+              var v = c[1] === 'lost' ? r.s.drops + r.s.throwaways : r.s[c[1]];
+              var str = c[1] === 'plusMinus' && v > 0 ? '+' + v : String(v);
+              var color = v === 0 ? '#B3ADA4' : c[1] === 'plusMinus' && v < 0 ? C.neg : (c[1] !== 'lost' && v === maxOf[c[1]] ? C.accentInk : C.ink);
+              tx(str, c[2], by, (c[1] === 'plusMinus' || v === maxOf[c[1]] ? '800 ' : '600 ') + '34px ' + SANS, color, 'right');
+            });
+          });
+        }
+
+        // Líneas y conexión
+        var ey = yExtra + 30;
+        if (m.lines.length) { tx('Breaks por línea: ' + m.lines.map(function (r) { return r.name + ' ' + r.D.won; }).join(' · '), P + 8, ey, '700 30px ' + SANS, C.ink, 'left', W - 2 * P); ey += 52; }
+        if (m.conn) { tx('Conexión del partido: ' + m.conn.from + ' → ' + m.conn.to + ' (' + m.conn.count + ')', P + 8, ey, '700 30px ' + SANS, C.ink, 'left', W - 2 * P); ey += 52; }
+
+        // Pie
+        tx('Pérd = drops + throwaways · Hecho con Narra', W / 2, H - 48, '600 24px ' + SANS, C.muted, 'center');
+        resolve(cv);
+      };
+      logo.src = 'narra-192.png';
+    });
+  }
+
+  function cardFileName(V) { return fileSlug(V) + '.png'; }
+
+  // Hoja para compartir: vista previa de la tarjeta + opciones.
   function shareSummary(V) {
-    var text = summaryText(V || currentStatsView());
-    if (navigator.share) { navigator.share({ title: 'Narra', text: text }).catch(function () {}); return; }
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(text).then(function () { toast('Resumen copiado: pégalo en el grupo'); }, function () { showText(text); });
-    } else showText(text);
+    V = V || currentStatsView();
+    var text = summaryText(V);
+    openSheet(function (sh, close) {
+      sh.appendChild(el('h3', { text: 'Compartir resultados' }));
+      var holder = el('div', { class: 'card-preview' }, [el('div', { class: 'muted small center', style: 'padding:40px 0', text: 'Armando la tarjeta…' })]);
+      sh.appendChild(holder);
+      var shareBtn = el('button', { class: 'btn accent big block', type: 'button', icon: 'share', disabled: true }, [' Compartir imagen']);
+      sh.appendChild(shareBtn);
+      sh.appendChild(el('div', { class: 'row', style: 'margin-top:8px' }, [
+        el('button', { class: 'btn', style: 'flex:1', type: 'button', text: 'Solo texto', onclick: function () {
+          if (navigator.share) { navigator.share({ text: text }).catch(function () {}); return; }
+          if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(function () { toast('Texto copiado: pégalo en el grupo'); }, function () { showText(text); });
+          else showText(text);
+        } }),
+        el('button', { class: 'btn', style: 'flex:1', type: 'button', text: 'Archivo para Excel', onclick: function () { exportCsv(V); } })
+      ]));
+      sh.appendChild(el('p', { class: 'muted small', style: 'margin:10px 0 0', text: 'La imagen se manda como foto con un resumen en texto. El archivo para Excel es para analizar en el computador.' }));
+      drawCard(V).then(function (cv) {
+        holder.innerHTML = '';
+        var img = el('img', { src: cv.toDataURL('image/png'), alt: 'Tarjeta del partido' });
+        holder.appendChild(img);
+        shareBtn.removeAttribute('disabled');
+        shareBtn.onclick = function () {
+          cv.toBlob(function (blob) {
+            var name = cardFileName(V);
+            try {
+              var f = new File([blob], name, { type: 'image/png' });
+              if (navigator.canShare && navigator.canShare({ files: [f] })) {
+                navigator.share({ files: [f], text: text }).catch(function () {});
+                return;
+              }
+            } catch (e) { /* sin Web Share */ }
+            download(blob, name);
+            toast('Imagen guardada: mándala al grupo desde tus fotos');
+          }, 'image/png');
+        };
+      }).catch(function (e) { logError('tarjeta: ' + e.message); holder.textContent = 'No pude armar la imagen. Usa "Solo texto".'; });
+    });
   }
 
   function lineStats(points) {
