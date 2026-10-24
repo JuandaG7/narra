@@ -1486,7 +1486,7 @@
       ids.forEach(function (id) { var p = byId(id); if (p && !players[id]) players[id] = { name: p.name, number: p.number || '', gender: p.gender || null }; });
     });
     return { id: g.id, createdAt: g.createdAt, finishedAt: g.finished ? (g.finishedAt || Date.now()) : null, rival: g.rival || '',
-      startType: g.startType, firstRatio: g.firstRatio, halftime: g.halftime, points: clone(g.points), players: players };
+      startType: g.startType, firstRatio: g.firstRatio, halftime: g.halftime, target: g.target || 0, points: clone(g.points), players: players };
   }
   function archiveCurrent() {
     if (!game.id) { game.id = uid('g'); game.createdAt = game.createdAt || Date.now(); }
@@ -1502,12 +1502,12 @@
   // Una "vista" de stats: el partido actual, uno guardado o toda la temporada.
   function currentStatsView() {
     return { kind: 'current', title: game.rival ? 'vs ' + game.rival : 'Este partido', rival: game.rival, points: game.points, roster: roster,
-      name: playerName, halftime: game.halftime, editable: true };
+      name: playerName, halftime: game.halftime, target: game.target || 0, startType: game.startType, editable: true };
   }
   function archivedView(h) {
     var list = Object.keys(h.players || {}).map(function (id) { return { id: id, name: h.players[id].name }; });
     return { kind: 'game', id: h.id, title: (h.rival ? 'vs ' + h.rival : 'Partido') + ' · ' + gameDate(h), rival: h.rival, points: h.points, roster: list,
-      name: function (id) { return id && h.players[id] ? h.players[id].name : (byId(id) ? byId(id).name : '?'); }, halftime: h.halftime, editable: false, game: h };
+      name: function (id) { return id && h.players[id] ? h.players[id].name : (byId(id) ? byId(id).name : '?'); }, halftime: h.halftime, target: h.target || 0, startType: h.startType, editable: false, game: h };
   }
   // Temporada: suma todos los partidos uniendo a los jugadores por nombre (sirve entre celulares distintos).
   function seasonView() {
@@ -1707,7 +1707,7 @@
       actions.appendChild(el('button', { class: 'btn accent block', type: 'button', icon: 'share', onclick: function () { shareSummary(V); } }, [' Compartir resultados']));
     }
     actions.appendChild(el('div', { class: 'row' }, [
-      el('button', { class: 'btn', style: 'flex:1', type: 'button', icon: 'download', onclick: function () { exportCsv(V); } }, [' Archivo para Excel']),
+      el('button', { class: 'btn', style: 'flex:1', type: 'button', icon: 'download', onclick: function () { openReport(V); } }, [' Informe PDF']),
       V.kind === 'season' ? null : el('button', { class: 'btn', style: 'flex:1', type: 'button', icon: 'share', onclick: function () { shareGameFile(V); } }, [' Enviar partido'])
     ]));
     if (V.kind === 'current') {
@@ -1905,6 +1905,314 @@
 
   function cardFileName(V) { return fileSlug(V) + '.png'; }
 
+  // ---------- Informe PDF (plantilla de Narra, sin librerías ni internet) ----------
+  // Cada página se dibuja en un canvas tamaño A4 con el mismo diseño de la app y se arma un PDF con esas imágenes.
+  var RC = { bg: '#F3EBDD', card: '#FBF7F0', sunk: '#E8DFCE', ink: '#1B2547', muted: '#6A6878', line: '#DDD2BF',
+    accent: '#F2541B', accentInk: '#A33A10', soft: '#FADBC9', solid: '#22305F', onSolid: '#F7F1E6', neg: '#C2361B', unc: '#F2D38A' };
+  var RSANS = 'ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  var RSERIF = '"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif';
+  var PW = 1240, PH = 1754, PM = 90; // A4 a 150 ppp
+
+  function newPage() {
+    var cv = document.createElement('canvas'); cv.width = PW; cv.height = PH;
+    var x = cv.getContext('2d');
+    x.fillStyle = RC.bg; x.fillRect(0, 0, PW, PH);
+    var P = {
+      cv: cv, x: x,
+      rr: function (px, py, w, h, r, fill) {
+        x.beginPath(); x.moveTo(px + r, py); x.arcTo(px + w, py, px + w, py + h, r); x.arcTo(px + w, py + h, px, py + h, r);
+        x.arcTo(px, py + h, px, py, r); x.arcTo(px, py, px + w, py, r); x.closePath(); x.fillStyle = fill; x.fill();
+      },
+      tx: function (str, px, py, font, color, align, maxW) {
+        x.font = font; x.fillStyle = color; x.textAlign = align || 'left'; x.textBaseline = 'alphabetic';
+        str = String(str);
+        if (maxW) { while (str.length > 1 && x.measureText(str).width > maxW) str = str.slice(0, -2) + '…'; }
+        x.fillText(str, px, py);
+        return x.measureText(str).width;
+      },
+      label: function (str, px, py, size, color, align) {
+        if ('letterSpacing' in x) x.letterSpacing = (size * 0.12) + 'px';
+        P.tx(str, px, py, '800 ' + size + 'px ' + RSANS, color || RC.muted, align);
+        if ('letterSpacing' in x) x.letterSpacing = '0px';
+      },
+      wrap: function (str, maxW, font) {
+        x.font = font;
+        var words = String(str).split(' '), lines = [], cur = '';
+        words.forEach(function (w) {
+          var t = cur ? cur + ' ' + w : w;
+          if (x.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t;
+        });
+        if (cur) lines.push(cur);
+        return lines;
+      }
+    };
+    return P;
+  }
+  function pageHeader(P, logo, title, V, m) {
+    if (logo && logo.naturalWidth) { P.x.save(); P.rr(PM, 70, 96, 96, 24, '#000'); P.x.clip(); P.x.drawImage(logo, PM, 70, 96, 96); P.x.restore(); }
+    P.tx('Narra', PM + 120, 140, 'italic 700 66px ' + RSERIF, RC.ink);
+    P.tx(title, PW - PM, 112, '800 30px ' + RSANS, RC.ink, 'right');
+    P.tx((V.kind === 'season' ? 'Temporada' : (m.rival ? 'vs ' + m.rival : 'Partido')) + ' · ' + m.date, PW - PM, 152, '600 28px ' + RSANS, RC.muted, 'right');
+    P.x.fillStyle = RC.line; P.x.fillRect(PM, 196, PW - 2 * PM, 2);
+  }
+  function pageFooter(P, i, n, V, m) {
+    P.tx('Narra · ' + (V.kind === 'season' ? 'Temporada' : (m.rival ? 'vs ' + m.rival : 'Partido')) + ' · ' + m.date, PM, PH - 50, '600 22px ' + RSANS, RC.muted);
+    P.tx('Página ' + i + ' de ' + n, PW - PM, PH - 50, '600 22px ' + RSANS, RC.muted, 'right');
+  }
+
+  function reportPages(V) {
+    var m = matchData(V);
+    var st = m.st;
+    return new Promise(function (resolve) {
+      var logo = new Image();
+      logo.onload = logo.onerror = function () {
+        var pages = [];
+
+        // ----- Página 1: resumen -----
+        var P = newPage(); pages.push(P);
+        pageHeader(P, logo, 'Informe del partido', V, m);
+        var y = 236;
+        P.rr(PM, y, PW - 2 * PM, 450, 40, RC.card);
+        if (V.kind === 'season') {
+          P.label('TEMPORADA · ' + V.games.length + ' PARTIDOS', PW / 2, y + 74, 30, RC.muted, 'center');
+          P.tx(V.record.w + '–' + V.record.l, PW / 2, y + 276, '800 200px ' + RSANS, RC.ink, 'center');
+          P.tx('ganados – perdidos' + (V.record.t ? ' · ' + V.record.t + ' empates' : '') + ' · puntos ' + m.sc.us + ' a ' + m.sc.them, PW / 2, y + 346, '700 30px ' + RSANS, RC.muted, 'center');
+        } else {
+          P.label((m.finished ? 'FINAL' : 'EN JUEGO') + (m.rival ? ' · VS ' + m.rival.toUpperCase() : ''), PW / 2, y + 74, 30, RC.muted, 'center');
+          P.tx(m.sc.us + '–' + m.sc.them, PW / 2, y + 268, '800 200px ' + RSANS, RC.ink, 'center');
+          if (m.finished) {
+            P.x.font = '800 34px ' + RSANS;
+            var pw = P.x.measureText(m.result.toUpperCase()).width + 70;
+            P.rr(PW / 2 - pw / 2, y + 300, pw, 62, 31, m.result === 'Ganamos' ? RC.accent : RC.solid);
+            P.label(m.result.toUpperCase(), PW / 2, y + 343, 30, '#FFFFFF', 'center');
+          }
+          // datos del partido
+          var meta = [];
+          if (V.target) meta.push('A ' + V.target);
+          if (V.startType) meta.push('Empezamos ' + (V.startType === 'O' ? 'atacando' : 'defendiendo'));
+          if (V.halftime != null && V.halftime > 0) { var hs = gameScore(V.points.slice(0, V.halftime)); meta.push('Medio tiempo ' + hs.us + '–' + hs.them); }
+          meta.push(decided(V.points) + ' puntos');
+          P.tx(meta.join(' · '), PW / 2, y + 412 - (m.finished ? 0 : 50), '700 26px ' + RSANS, RC.muted, 'center');
+        }
+        y += 480;
+
+        var mw = (PW - 2 * PM - 30) / 2;
+        [['HOLDS', st.holds, RC.accent, 'Puntos de ataque ganados'], ['BREAKS', st.breaks, RC.solid, 'Puntos de defensa ganados']].forEach(function (it, i) {
+          var mx = PM + i * (mw + 30);
+          P.rr(mx, y, mw, 170, 32, RC.card);
+          P.label(it[0], mx + 36, y + 52, 26);
+          var vw = P.tx(it[1].won, mx + 36, y + 118, '800 72px ' + RSANS, RC.ink);
+          P.tx(' / ' + it[1].played, mx + 36 + vw, y + 118, '700 38px ' + RSANS, RC.muted);
+          var pct = it[1].played ? Math.round(100 * it[1].won / it[1].played) : 0;
+          P.tx(pct + '%', mx + mw - 36, y + 118, '800 38px ' + RSANS, it[2], 'right');
+          P.rr(mx + 36, y + 136, mw - 72, 12, 6, RC.sunk);
+          if (pct) P.rr(mx + 36, y + 136, (mw - 72) * pct / 100, 12, 6, it[2]);
+        });
+        y += 196;
+
+        var leaders = [['MÁS GOLES', m.goals], ['MÁS ASISTENCIAS', m.assists], ['MÁS DEFENSAS', m.ds], ['MEJOR +/-', m.pm]].filter(function (q) { return q[1]; });
+        if (leaders.length) {
+          P.label('LÍDERES', PM + 8, y + 30, 26);
+          leaders.forEach(function (it, i) {
+            var lx = PM + (i % 2) * (mw + 30), ly = y + 50 + Math.floor(i / 2) * 136;
+            P.rr(lx, ly, mw, 120, 30, RC.card);
+            P.label(it[0], lx + 36, ly + 44, 22);
+            P.tx(it[1].names.join(', '), lx + 36, ly + 96, '800 40px ' + RSANS, RC.ink, 'left', mw - 190);
+            P.tx((it[0] === 'MEJOR +/-' ? '+' : '') + it[1].value, lx + mw - 36, ly + 98, '800 64px ' + RSANS, RC.accentInk, 'right');
+          });
+          y += 50 + Math.ceil(leaders.length / 2) * 136 + 10;
+        }
+
+        // Por línea y conexiones, en dos columnas
+        var ls = lineStats(V.points);
+        var colTop = y, colH = PH - 120 - colTop;
+        var fitRows = Math.max(1, Math.floor((colH - 96) / 62));
+        P.rr(PM, colTop, mw, colH, 32, RC.card);
+        P.label('POR LÍNEA', PM + 36, colTop + 58, 24);
+        P.label('BREAKS', PM + mw - 170, colTop + 58, 20, RC.muted, 'right');
+        P.label('HOLDS', PM + mw - 36, colTop + 58, 20, RC.muted, 'right');
+        if (!ls.length) P.tx('Sin líneas registradas', PM + 36, colTop + 116, '600 28px ' + RSANS, RC.muted);
+        if (ls.length > fitRows) P.tx('+' + (ls.length - fitRows + 1) + ' líneas más en la app', PM + 36, colTop + 116 + (fitRows - 1) * 62, '600 24px ' + RSANS, RC.muted);
+        ls.slice(0, ls.length > fitRows ? fitRows - 1 : fitRows).forEach(function (r, i) {
+          var ry = colTop + 116 + i * 62;
+          P.tx(r.name, PM + 36, ry, '800 30px ' + RSANS, RC.ink, 'left', mw - 300);
+          if (r.changed) P.tx(r.changed + (r.changed === 1 ? ' punto con cambios' : ' puntos con cambios'), PM + 36, ry + 27, '600 20px ' + RSANS, RC.muted);
+          P.tx(r.D.played ? r.D.won + '/' + r.D.played : '–', PM + mw - 170, ry, '800 30px ' + RSANS, r.D.won ? RC.solid : RC.muted, 'right');
+          P.tx(r.O.played ? r.O.won + '/' + r.O.played : '–', PM + mw - 36, ry, '800 30px ' + RSANS, r.O.won ? RC.accentInk : RC.muted, 'right');
+        });
+        var cx2 = PM + mw + 30;
+        P.rr(cx2, colTop, mw, colH, 32, RC.card);
+        P.label('CONEXIONES', cx2 + 36, colTop + 58, 24);
+        var conns = st.connections.slice(0, fitRows), cmax = conns.length ? conns[0].count : 1;
+        if (!conns.length) P.tx('Sin pases registrados', cx2 + 36, colTop + 116, '600 28px ' + RSANS, RC.muted);
+        conns.forEach(function (c, i) {
+          var ry = colTop + 116 + i * 62;
+          P.tx(V.name(c.from) + ' → ' + V.name(c.to), cx2 + 36, ry, '800 28px ' + RSANS, RC.ink, 'left', mw - 140);
+          P.tx(c.count, cx2 + mw - 36, ry, '800 30px ' + RSANS, RC.accentInk, 'right');
+          P.rr(cx2 + 36, ry + 14, mw - 72, 8, 4, RC.sunk);
+          P.rr(cx2 + 36, ry + 14, (mw - 72) * c.count / cmax, 8, 4, RC.accent);
+        });
+
+        // ----- Página(s): tabla por jugador -----
+        var cols = COLS.filter(function (c) { return V.points.some(function (p) { return p.line && p.line.length; }) || (c[0] !== 'points' && c[0] !== 'breaks'); });
+        var rows = m.rows;
+        var perPage = 24;
+        for (var start = 0; start === 0 || start < rows.length; start += perPage) {
+          var T = newPage(); pages.push(T);
+          pageHeader(T, logo, 'Por jugador', V, m);
+          var ty = 236, rowH = 50;
+          var chunk = rows.slice(start, start + perPage);
+          var tableH = 90 + chunk.length * rowH + 20;
+          T.rr(PM, ty, PW - 2 * PM, tableH, 32, RC.card);
+          var nameW = 230, numW = (PW - 2 * PM - 60 - nameW) / cols.length;
+          var colX = function (i) { return PM + 30 + nameW + numW * (i + 1) - 6; };
+          T.label('JUGADOR', PM + 30, ty + 60, 20);
+          cols.forEach(function (c, i) { T.label(c[1].toUpperCase(), colX(i), ty + 60, 18, RC.muted, 'right'); });
+          var maxOf = {};
+          cols.forEach(function (c) { maxOf[c[0]] = Math.max.apply(null, rows.map(function (r) { return r.s[c[0]]; }).concat([0])); });
+          chunk.forEach(function (r, i) {
+            var ry = ty + 90 + i * rowH;
+            if (i % 2 === 0) { T.x.fillStyle = 'rgba(232,223,206,.5)'; T.x.fillRect(PM + 16, ry, PW - 2 * PM - 32, rowH); }
+            T.tx(V.name(r.id), PM + 30, ry + 34, '700 28px ' + RSANS, RC.ink, 'left', nameW - 10);
+            cols.forEach(function (c, ci) {
+              var v = r.s[c[0]], info = COL_INFO[c[0]];
+              var color = v === 0 ? '#B3ADA4' : c[0] === 'plusMinus' && v < 0 ? RC.neg : (info.good && v === maxOf[c[0]] ? RC.accentInk : RC.ink);
+              T.tx(c[0] === 'plusMinus' && v > 0 ? '+' + v : v, colX(ci), ry + 34, (c[0] === 'plusMinus' || (info.good && v === maxOf[c[0]] && v) ? '800 ' : '600 ') + '28px ' + RSANS, color, 'right');
+            });
+          });
+          if (!chunk.length) T.tx('Sin datos todavía', PM + 30, ty + 130, '600 28px ' + RSANS, RC.muted);
+          // Cómo leer
+          var gy = ty + tableH + 50;
+          if (gy < PH - 300) {
+            T.label('CÓMO LEER', PM + 8, gy, 22);
+            gy += 40;
+            cols.forEach(function (c) {
+              if (gy > PH - 110) return;
+              var info = COL_INFO[c[0]];
+              var lines = T.wrap(info.desc, PW - 2 * PM - 130, '600 22px ' + RSANS);
+              T.tx(c[1], PM + 8, gy, '800 22px ' + RSANS, RC.accentInk);
+              lines.forEach(function (ln, li) { T.tx(ln, PM + 110, gy + li * 28, '600 22px ' + RSANS, RC.ink); });
+              gy += lines.length * 28 + 8;
+            });
+          }
+          if (rows.length <= perPage) break;
+        }
+
+        // ----- Página(s): punto por punto o partidos de la temporada -----
+        if (V.kind === 'season') {
+          var S = newPage(); pages.push(S);
+          pageHeader(S, logo, 'Partidos', V, m);
+          var sy = 250;
+          V.games.forEach(function (h) {
+            if (sy > PH - 140) return;
+            var sc = gameScore(h.points);
+            S.rr(PM, sy, PW - 2 * PM, 86, 24, RC.card);
+            S.tx(gameDate(h), PM + 30, sy + 54, '600 26px ' + RSANS, RC.muted);
+            S.tx(h.rival ? 'vs ' + h.rival : 'Partido', PM + 220, sy + 54, '800 30px ' + RSANS, RC.ink, 'left', 560);
+            S.tx(sc.us + '–' + sc.them, PW - PM - 200, sy + 56, '800 36px ' + RSANS, RC.ink, 'right');
+            var res = sc.us > sc.them ? 'GANAMOS' : sc.us < sc.them ? 'PERDIMOS' : 'EMPATE';
+            S.label(res, PW - PM - 30, sy + 54, 20, sc.us > sc.them ? RC.accentInk : RC.solid, 'right');
+            sy += 104;
+          });
+        } else {
+          var Q = null, qy = 0, us = 0, them = 0;
+          var startPointsPage = function () { Q = newPage(); pages.push(Q); pageHeader(Q, logo, 'Punto por punto', V, m); qy = 236; };
+          startPointsPage();
+          V.points.forEach(function (p, i) {
+            var oc = Core.outcomeOf(p.events || []);
+            if (oc === 'us') us++; if (oc === 'them') them++;
+            var evText = (p.events || []).map(function (ev) { return describe(ev, V.name); }).join('  ·  ') || 'Sin eventos';
+            var lines = Q.wrap(evText, PW - 2 * PM - 300, '600 24px ' + RSANS);
+            var h = Math.max(112, 70 + lines.length * 32);
+            if (qy + h + (V.halftime === i && i ? 60 : 0) > PH - 110) startPointsPage();
+            if (V.halftime === i && i) {
+              Q.label('MEDIO TIEMPO · ' + (us - (oc === 'us' ? 1 : 0)) + '–' + (them - (oc === 'them' ? 1 : 0)), PW / 2, qy + 36, 22, RC.muted, 'center');
+              qy += 60;
+            }
+            Q.rr(PM, qy, PW - 2 * PM, h, 24, RC.card);
+            // resultado
+            Q.rr(PM + 24, qy + 22, 52, 52, 14, oc === 'us' ? RC.solid : oc === 'them' ? RC.sunk : RC.unc);
+            Q.tx(oc === 'us' ? '✓' : oc === 'them' ? '✕' : '?', PM + 50, qy + 60, '800 30px ' + RSANS, oc === 'us' ? '#FFFFFF' : RC.ink, 'center');
+            Q.tx(oc ? us + '–' + them : 's/r', PM + 96, qy + 58, '800 32px ' + RSANS, RC.ink);
+            // tipo y proporción
+            if (p.type) {
+              Q.rr(PM + 24, qy + 80, 92, 24, 12, p.type === 'O' ? RC.accent : RC.solid);
+              Q.tx(p.type === 'O' ? 'ATAQUE' : 'DEFENSA', PM + 70, qy + 98, '800 15px ' + RSANS, '#FFFFFF', 'center');
+            }
+            if (p.ratio) Q.tx(p.ratio === '4M' ? '4 chicas' : '4 chicos', PM + 128, qy + 98, '700 18px ' + RSANS, RC.muted);
+            // eventos
+            var ex = PM + 290;
+            Q.tx('Punto ' + (i + 1) + (p.lineName ? ' · ' + p.lineName : ''), ex, qy + 40, '700 22px ' + RSANS, RC.muted, 'left', PW - PM - ex - 24);
+            lines.forEach(function (ln, li) { Q.tx(ln, ex, qy + 76 + li * 32, '600 24px ' + RSANS, RC.ink); });
+            qy += h + 14;
+          });
+        }
+
+        pages.forEach(function (pg, i) { pageFooter(pg, i + 1, pages.length, V, m); });
+        resolve(pages.map(function (pg) { return pg.cv; }));
+      };
+      logo.src = 'narra-192.png';
+    });
+  }
+
+  // PDF mínimo: una imagen JPEG por página (A4). Funciona sin internet y sin librerías.
+  function pdfFromCanvases(canvases) {
+    var enc = function (str) { var a = new Uint8Array(str.length); for (var i = 0; i < str.length; i++) a[i] = str.charCodeAt(i) & 255; return a; };
+    var jpegs = canvases.map(function (cv) {
+      var b64 = cv.toDataURL('image/jpeg', 0.88).split(',')[1], bin = atob(b64), arr = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return { data: arr, w: cv.width, h: cv.height };
+    });
+    var parts = [], offsets = [], size = 0;
+    function push(chunk) { parts.push(chunk); size += chunk.length; }
+    function obj(n, body) { offsets[n] = size; push(enc(n + ' 0 obj\n')); body.forEach(push); push(enc('\nendobj\n')); }
+    push(enc('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n'));
+    var n = jpegs.length, kids = [];
+    for (var i = 0; i < n; i++) kids.push((3 + i * 3) + ' 0 R');
+    obj(1, [enc('<< /Type /Catalog /Pages 2 0 R >>')]);
+    obj(2, [enc('<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + n + ' >>')]);
+    var pw = 595.28, ph = 841.89;
+    jpegs.forEach(function (j, i) {
+      var pg = 3 + i * 3, ct = pg + 1, im = pg + 2;
+      obj(pg, [enc('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + pw + ' ' + ph + '] /Resources << /XObject << /Im' + i + ' ' + im + ' 0 R >> >> /Contents ' + ct + ' 0 R >>')]);
+      var content = 'q ' + pw + ' 0 0 ' + ph + ' 0 0 cm /Im' + i + ' Do Q';
+      obj(ct, [enc('<< /Length ' + content.length + ' >>\nstream\n' + content + '\nendstream')]);
+      obj(im, [enc('<< /Type /XObject /Subtype /Image /Width ' + j.w + ' /Height ' + j.h + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + j.data.length + ' >>\nstream\n'), j.data, enc('\nendstream')]);
+    });
+    var total = 3 + n * 3;
+    var xref = size, x = 'xref\n0 ' + total + '\n0000000000 65535 f \n';
+    for (var k = 1; k < total; k++) x += String(offsets[k]).padStart(10, '0') + ' 00000 n \n';
+    push(enc(x + 'trailer\n<< /Size ' + total + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF'));
+    return new Blob(parts, { type: 'application/pdf' });
+  }
+
+  // Hoja del informe: vista previa de las páginas y botón para compartir el PDF.
+  function openReport(V) {
+    openSheet(function (sh) {
+      sh.appendChild(el('h3', { text: 'Informe completo (PDF)' }));
+      var holder = el('div', { class: 'report-preview' }, [el('div', { class: 'muted small center', style: 'padding:40px 0', text: 'Armando el informe…' })]);
+      sh.appendChild(holder);
+      var btn = el('button', { class: 'btn accent big block', type: 'button', icon: 'share', disabled: true }, [' Compartir PDF']);
+      sh.appendChild(btn);
+      sh.appendChild(el('button', { class: 'btn link small', style: 'margin-top:8px', type: 'button', text: 'Datos crudos en CSV (para Excel)', onclick: function () { exportCsv(V); } }));
+      reportPages(V).then(function (cvs) {
+        holder.innerHTML = '';
+        cvs.forEach(function (cv, i) { holder.appendChild(el('img', { src: cv.toDataURL('image/jpeg', 0.7), alt: 'Página ' + (i + 1) })); });
+        var blob = pdfFromCanvases(cvs);
+        var name = fileSlug(V) + '.pdf';
+        btn.removeAttribute('disabled');
+        btn.onclick = function () {
+          try {
+            var f = new File([blob], name, { type: 'application/pdf' });
+            if (navigator.canShare && navigator.canShare({ files: [f] })) { navigator.share({ files: [f], title: 'Informe Narra' }).catch(function () {}); return; }
+          } catch (e) { /* sin Web Share */ }
+          download(blob, name);
+          toast('PDF guardado: mándalo desde tus descargas');
+        };
+      }).catch(function (e) { logError('informe: ' + e.message); holder.textContent = 'No pude armar el informe.'; });
+    });
+  }
+
   // Hoja para compartir: vista previa de la tarjeta + opciones.
   function shareSummary(V) {
     V = V || currentStatsView();
@@ -1921,9 +2229,9 @@
           if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(function () { toast('Texto copiado: pégalo en el grupo'); }, function () { showText(text); });
           else showText(text);
         } }),
-        el('button', { class: 'btn', style: 'flex:1', type: 'button', text: 'Archivo para Excel', onclick: function () { exportCsv(V); } })
+        el('button', { class: 'btn', style: 'flex:1', type: 'button', text: 'Informe PDF', onclick: function () { openReport(V); } })
       ]));
-      sh.appendChild(el('p', { class: 'muted small', style: 'margin:10px 0 0', text: 'La imagen se manda como foto con un resumen en texto. El archivo para Excel es para analizar en el computador.' }));
+      sh.appendChild(el('p', { class: 'muted small', style: 'margin:10px 0 0', text: 'La imagen va al grupo como foto. El informe PDF trae todo: resumen, tabla por jugador y punto por punto.' }));
       drawCard(V).then(function (cv) {
         holder.innerHTML = '';
         var img = el('img', { src: cv.toDataURL('image/png'), alt: 'Tarjeta del partido' });

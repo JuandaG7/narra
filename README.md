@@ -71,6 +71,9 @@ Todo funciona en el teléfono: plantilla, interpretación y estadísticas se gua
   breaks y holds por línea, y la columna Brk dice en cuántos breaks estuvo cada jugador.
 - **Resumen para el grupo:** "Mandar resumen al grupo" arma un mensaje con marcador, breaks, goles, asistencias,
   D, mejor +/- y conexión del partido, listo para WhatsApp.
+- **Compartir resultados:** tarjeta-imagen del partido para el grupo (con texto en negritas de WhatsApp) e
+  **informe PDF** con todo: resumen, tabla completa por jugador con su guía y punto por punto. El PDF se arma en
+  el celular sin internet. Los datos crudos en CSV siguen disponibles para Excel.
 
 ## Correr en el computador
 
